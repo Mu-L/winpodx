@@ -38,6 +38,12 @@ class AppInfo:
     args: str = ""
     wm_class_hint: str = ""
     launch_uri: str = ""  # UWP AUMID (shell:AppsFolder\<AUMID>)
+    # One-line description from the guest's app metadata (Win32 exe
+    # ProductName / .lnk Comment / UWP AppxManifest <Description>).
+    # Lands in the .desktop Comment= field so the user's app menu shows
+    # the actual app description instead of the generic "Windows
+    # application via winpodx" stamp.
+    description: str = ""
     # Hybrid filter state (set by discovery, overridable by the user via
     # the GUI's "Hide / Show" action). The GUI grid filters where
     # `hidden=True`; toggling adds an explicit override that survives
@@ -111,6 +117,7 @@ def load_app(app_dir: Path, default_source: str = "user") -> AppInfo | None:
         args=data.get("args", "") or "",
         wm_class_hint=data.get("wm_class_hint", "") or "",
         launch_uri=data.get("launch_uri", "") or "",
+        description=data.get("description", "") or "",
         hidden=bool(data.get("hidden", False)),
         essential=bool(data.get("essential", False)),
     )

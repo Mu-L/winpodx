@@ -26,6 +26,7 @@ def test_desktop_template():
     content = DESKTOP_TEMPLATE.format(
         full_name=app.full_name,
         name=app.name,
+        comment="Word processor",
         icon_name=f"winpodx-{app.name}",
         categories=";".join(app.categories) + ";",
         mime_types=";".join(app.mime_types) + ";",
@@ -33,6 +34,7 @@ def test_desktop_template():
     )
 
     assert "Name=Microsoft Word" in content
+    assert "Comment=Word processor" in content
     assert "Exec=winpodx app run word %F" in content
     assert "Icon=winpodx-word" in content
     assert "Categories=Office;WordProcessor;" in content
@@ -479,6 +481,59 @@ def test_save_app_profile_utf8_korean(tmp_path, monkeypatch):
     assert "\ud55c\uae00 \uba54\ubaa8\uc7a5" in content
     raw = toml_path.read_bytes()
     assert "\ud55c\uae00 \uba54\ubaa8\uc7a5".encode("utf-8") in raw
+
+
+def test_install_desktop_entry_uses_app_description(tmp_path, monkeypatch):
+    """When AppInfo.description is set, the .desktop Comment= line should
+    use it instead of the generic 'Windows application via winpodx' stamp."""
+    monkeypatch.setattr("winpodx.desktop.entry.applications_dir", lambda: tmp_path)
+    monkeypatch.setattr("winpodx.desktop.entry.icons_dir", lambda: tmp_path / "icons")
+    app = AppInfo(
+        name="edge",
+        full_name="Microsoft Edge",
+        executable="C:\\Program Files\\Edge\\msedge.exe",
+        description="Browse the web with Microsoft Edge",
+    )
+    desktop_path = install_desktop_entry(app)
+    raw = desktop_path.read_text(encoding="utf-8")
+    assert "Comment=Browse the web with Microsoft Edge" in raw
+    assert "Comment=Windows application via winpodx" not in raw
+
+
+def test_install_desktop_entry_falls_back_when_description_blank(tmp_path, monkeypatch):
+    """Apps without a discovered description still get the generic stamp."""
+    monkeypatch.setattr("winpodx.desktop.entry.applications_dir", lambda: tmp_path)
+    monkeypatch.setattr("winpodx.desktop.entry.icons_dir", lambda: tmp_path / "icons")
+    app = AppInfo(
+        name="legacy",
+        full_name="Legacy App",
+        executable="C:\\legacy.exe",
+        # description omitted intentionally
+    )
+    desktop_path = install_desktop_entry(app)
+    raw = desktop_path.read_text(encoding="utf-8")
+    assert "Comment=Windows application via winpodx" in raw
+
+
+def test_install_desktop_entry_strips_newlines_in_description(tmp_path, monkeypatch):
+    """Multi-line / tab-laden descriptions from the guest must not
+    corrupt later .desktop keys (each key is line-terminated)."""
+    monkeypatch.setattr("winpodx.desktop.entry.applications_dir", lambda: tmp_path)
+    monkeypatch.setattr("winpodx.desktop.entry.icons_dir", lambda: tmp_path / "icons")
+    app = AppInfo(
+        name="messy",
+        full_name="Messy App",
+        executable="C:\\messy.exe",
+        description="Line one\nLine two\twith tab\rcarriage",
+    )
+    desktop_path = install_desktop_entry(app)
+    raw = desktop_path.read_text(encoding="utf-8")
+    comment_line = next(line for line in raw.splitlines() if line.startswith("Comment="))
+    assert "\n" not in comment_line
+    assert "\t" not in comment_line
+    assert "\r" not in comment_line
+    # Following keys (Exec, Icon, …) must still be intact.
+    assert "Exec=winpodx app run messy %F" in raw
 
 
 if __name__ == "__main__":  # pragma: no cover

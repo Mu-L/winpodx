@@ -16,7 +16,7 @@ DESKTOP_TEMPLATE = """\
 Version=1.0
 Type=Application
 Name={full_name}
-Comment=Windows application via winpodx
+Comment={comment}
 Exec=winpodx app run {name} %F
 Icon={icon_name}
 Categories={categories}
@@ -26,6 +26,11 @@ Terminal=false
 StartupNotify=true
 StartupWMClass={wm_class}
 """
+
+# Default Comment when discovery couldn't pull a real description from
+# the app's metadata. Better than nothing — keeps the .desktop spec's
+# Comment field non-empty for menu tooltips and file managers.
+_DEFAULT_COMMENT = "Windows application via winpodx"
 
 
 def install_desktop_entry(app: AppInfo) -> Path:
@@ -40,9 +45,17 @@ def install_desktop_entry(app: AppInfo) -> Path:
 
     wm_class = PureWindowsPath(app.executable).stem.lower()
 
+    # Prefer the app's real description (from exe metadata / .lnk Comment /
+    # UWP <Description>); fall back to the generic stamp when blank. Strip
+    # newlines and tabs because the .desktop spec keys are line-terminated
+    # and a newline mid-Comment would corrupt later keys.
+    comment = (app.description or "").replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    comment = comment.strip() or _DEFAULT_COMMENT
+
     content = DESKTOP_TEMPLATE.format(
         full_name=app.full_name,
         name=app.name,
+        comment=comment,
         icon_name=icon_name,
         categories=";".join(app.categories) + ";" if app.categories else "",
         mime_types=";".join(app.mime_types) + ";" if app.mime_types else "",

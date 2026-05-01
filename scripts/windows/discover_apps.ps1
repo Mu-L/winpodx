@@ -102,6 +102,30 @@ function Get-DisplayName {
     try { return [System.IO.Path]::GetFileNameWithoutExtension($ExePath) } catch { return '' }
 }
 
+function Get-AppDescription {
+    # Pull a one-line description from the executable's version metadata.
+    # Order: Comments (most descriptive when authors fill it in) >
+    # ProductName (brand string, e.g. "Microsoft Edge") > empty. We
+    # deliberately don't reuse FileDescription here — Get-DisplayName
+    # already returns it as the *name*, and re-emitting it as the
+    # Comment would be redundant on the Linux side.
+    param([string]$ExePath)
+    try {
+        $item = Get-Item -LiteralPath $ExePath -ErrorAction Stop
+        $vi = $item.VersionInfo
+        if (-not $vi) { return '' }
+        if ($vi.Comments -and $vi.Comments.Trim()) { return $vi.Comments.Trim() }
+        if ($vi.ProductName -and $vi.ProductName.Trim()) {
+            $product = $vi.ProductName.Trim()
+            $name = if ($vi.FileDescription) { $vi.FileDescription.Trim() } else { '' }
+            # Avoid the Comment === Name case ("Microsoft Edge" / "Microsoft Edge");
+            # that's no more useful than the generic fallback the host stamps.
+            if ($product -ne $name) { return $product }
+        }
+    } catch { }
+    return ''
+}
+
 function Read-IconBytesFromFile {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
@@ -119,6 +143,7 @@ if ($DryRun) {
     $canned = @(
         [ordered]@{
             name          = 'Notepad (DryRun)'
+            description   = 'Plain text editor (DryRun fixture)'
             path          = 'C:\Windows\notepad.exe'
             args          = ''
             source        = 'win32'
@@ -189,6 +214,7 @@ foreach ($hive in 'HKLM:', 'HKCU:') {
                 $stem = [System.IO.Path]::GetFileNameWithoutExtension($exe)
                 Add-Result @{
                     name          = Get-DisplayName -ExePath $exe -Fallback $stem
+                    description   = Get-AppDescription $exe
                     path          = $exe
                     args          = ''
                     source        = 'win32'
@@ -238,8 +264,15 @@ foreach ($d in $startDirs) {
                     if ($target -notmatch '\.exe$') { return }
                     if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { return }
                     $baseName = [System.IO.Path]::GetFileNameWithoutExtension($_.Name)
+                    # .lnk shortcuts have a Description property (the Comment
+                    # field in shortcut Properties); prefer it when set since
+                    # it's user-curated, then fall back to exe metadata.
+                    $lnkDesc = ''
+                    try { $lnkDesc = [string]$lnk.Description } catch { $lnkDesc = '' }
+                    if (-not $lnkDesc) { $lnkDesc = Get-AppDescription $target }
                     Add-Result @{
                         name          = Get-DisplayName -ExePath $target -Fallback $baseName
+                        description   = $lnkDesc
                         path          = $target
                         args          = [string]$lnk.Arguments
                         source        = 'win32'
@@ -291,11 +324,30 @@ try {
                     }
 
                     $displayName = [string]$pkg.Name
+                    $description = ''
                     if ($ve) {
                         $dn = [string]$ve.DisplayName
                         if ($dn -and ($dn -notmatch '^ms-resource:')) {
                             $displayName = $dn
                         }
+                        # AppxManifest's <VisualElements Description="..."> is the
+                        # Start-menu tooltip — exactly what we want for the
+                        # Linux .desktop Comment field. Skip ms-resource:
+                        # indirections that PowerShell can't resolve in a
+                        # non-interactive session.
+                        $desc = [string]$ve.Description
+                        if ($desc -and ($desc -notmatch '^ms-resource:')) {
+                            $description = $desc.Trim()
+                        }
+                    }
+                    # Fall back to the package-level <Properties><Description>.
+                    if (-not $description) {
+                        try {
+                            $pkgDesc = [string]$manifest.Package.Properties.Description
+                            if ($pkgDesc -and ($pkgDesc -notmatch '^ms-resource:')) {
+                                $description = $pkgDesc.Trim()
+                            }
+                        } catch { }
                     }
 
                     $logoRel = ''
@@ -327,6 +379,7 @@ try {
                     # path must be non-empty per core contract; use InstallLocation as placeholder.
                     Add-Result @{
                         name          = $displayName
+                        description   = $description
                         path          = [string]$pkg.InstallLocation
                         args          = ''
                         source        = 'uwp'
@@ -366,6 +419,7 @@ foreach ($d in $shimDirs) {
                 } catch { }
                 Add-Result @{
                     name          = Get-DisplayName -ExePath $resolved -Fallback $_.BaseName
+                    description   = Get-AppDescription $resolved
                     path          = $resolved
                     args          = ''
                     source        = 'win32'
@@ -397,6 +451,7 @@ try {
     if (Test-Path -LiteralPath $explorer) {
         Add-Result @{
             name          = 'File Explorer'
+            description   = 'Browse files and folders on the Windows guest'
             path          = $explorer
             args          = 'shell:MyComputerFolder'
             source        = 'win32'
@@ -468,8 +523,29 @@ function Emit-EssentialUwp([string]$FamilyPrefix, [string]$DisplayName, [string]
             }
         }
 
+        # Mine the AppxManifest for a real description if available;
+        # ms-resource: indirections fall back to a sensible default.
+        $emitDesc = ''
+        try {
+            $apps = $manifest.Package.Applications.Application
+            if ($apps -isnot [System.Collections.IEnumerable]) { $apps = @($apps) }
+            foreach ($appNode in $apps) {
+                if ([string]$appNode.Id -ne $AppId) { continue }
+                $ve = $null
+                foreach ($probe in 'VisualElements', 'uap:VisualElements') {
+                    try { if ($appNode.$probe) { $ve = $appNode.$probe; break } } catch { }
+                }
+                if ($ve) {
+                    $d = [string]$ve.Description
+                    if ($d -and ($d -notmatch '^ms-resource:')) { $emitDesc = $d.Trim() }
+                }
+                break
+            }
+        } catch { }
+
         Add-Result @{
             name          = $DisplayName
+            description   = $emitDesc
             path          = [string]$pkg.InstallLocation
             args          = ''
             source        = 'uwp'

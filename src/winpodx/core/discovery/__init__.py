@@ -223,6 +223,7 @@ class DiscoveredApp:
     name: str
     full_name: str
     executable: str
+    description: str = ""  # one-line tooltip / .desktop Comment field
     args: str = ""
     source: str = "win32"  # uwp | win32 | steam
     wm_class_hint: str = ""
@@ -266,6 +267,7 @@ ESSENTIAL_APPS: tuple[dict[str, str], ...] = (
         # the user shell — RemoteApp shows nothing. shell:MyComputerFolder
         # opens the "This PC" view as a normal explorer window instead.
         "args": "shell:MyComputerFolder",
+        "description": "Browse files and folders on the Windows guest",
         "wm_class_hint": "explorer",
         "source": "win32",
     },
@@ -274,6 +276,7 @@ ESSENTIAL_APPS: tuple[dict[str, str], ...] = (
         "full_name": "Calculator",
         "executable": "explorer.exe",
         "launch_uri": "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App",
+        "description": "Calculator app from the Windows guest",
         "wm_class_hint": "calculator",
         "source": "uwp",
     },
@@ -284,6 +287,7 @@ ESSENTIAL_APPS: tuple[dict[str, str], ...] = (
         "launch_uri": (
             "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel"
         ),
+        "description": "Open the Windows guest's Settings panel",
         "wm_class_hint": "settings",
         "source": "uwp",
     },
@@ -372,6 +376,7 @@ def _merge_essentials(scanned: list[DiscoveredApp]) -> list[DiscoveredApp]:
                 name=slug,
                 full_name=spec.get("full_name", slug),
                 executable=spec.get("executable", ""),
+                description=spec.get("description", ""),
                 args=spec.get("args", ""),
                 source=spec.get("source", "win32"),
                 wm_class_hint=spec.get("wm_class_hint", ""),
@@ -710,6 +715,13 @@ def _entry_to_discovered(entry: dict[str, Any]) -> DiscoveredApp | None:
     if not isinstance(args, str) or len(args) > _MAX_PATH_LEN:
         args = ""
 
+    description = entry.get("description", "")
+    if not isinstance(description, str):
+        description = ""
+    # Bound the description so a hostile guest can't fill the .desktop
+    # Comment field with megabytes of garbage.
+    description = description.strip()[:512]
+
     wm_class_hint = entry.get("wm_class_hint", "")
     if not isinstance(wm_class_hint, str) or len(wm_class_hint) > _MAX_NAME_LEN:
         wm_class_hint = ""
@@ -747,6 +759,7 @@ def _entry_to_discovered(entry: dict[str, Any]) -> DiscoveredApp | None:
         name=slug,
         full_name=raw_name.strip(),
         executable=path.strip(),
+        description=description,
         args=args,
         source=source,
         wm_class_hint=wm_class_hint,
@@ -881,6 +894,8 @@ def _render_app_toml(app: DiscoveredApp) -> str:
     }
     if app.args:
         data["args"] = app.args
+    if app.description:
+        data["description"] = app.description
     if app.source:
         data["source"] = app.source
     if app.wm_class_hint:
