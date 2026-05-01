@@ -9,6 +9,12 @@
 
 <pre><code>curl -fsSL https://raw.githubusercontent.com/kernalix7/winpodx/main/install.sh | bash</code></pre>
 
+<a href="images/demo.png">
+  <img src="images/demo.png" alt="winpodx 실행 모습 — KDE 데스크톱 위에서 Windows 앱이 각각 네이티브 Linux 창으로" width="720">
+</a>
+
+<sub>Windows 정보 / 작업 관리자 / PowerShell 이 각각 Linux 창으로, winpodx Apps 그리드와 나란히.</sub>
+
 [![Beta](https://img.shields.io/badge/status-beta-orange?style=for-the-badge)](#상태-베타)
 [![Latest](https://img.shields.io/github/v/release/kernalix7/winpodx?include_prereleases&style=for-the-badge&label=latest&color=2962FF)](https://github.com/kernalix7/winpodx/releases)
 

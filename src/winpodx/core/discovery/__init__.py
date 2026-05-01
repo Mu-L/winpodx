@@ -31,6 +31,11 @@ import sys
 import threading
 import time
 import zlib
+
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib  # Python 3.9, 3.10
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -198,6 +203,149 @@ class DiscoveredApp:
     # materialised. Empty on freshly-parsed instances.
     slug: str = ""  # sanitized app name slug (same as `name` after persist)
     icon_path: str = ""  # absolute path to persisted PNG/SVG, or ""
+    # Hybrid filter classification — set by persist_discovered() based on
+    # the curated allowlist / noise denylist + any prior user override.
+    hidden: bool = False
+    essential: bool = False
+
+
+# --- Hybrid filter: essentials allowlist + noise denylist -----------------
+#
+# Auto-discovery surfaces 40-50 entries on a stock Windows 11 install — many
+# are system shims (LicenseManagerShellExt, WindowsPackageManagerServer,
+# DesktopPackageMetadata, …) that no user wants in their app menu, and a few
+# OS staples (File Explorer, Settings) don't appear at all because they
+# aren't enumerated as Start Menu .lnk files. The hybrid filter:
+#
+#   1. ESSENTIAL_APPS — guarantees the staples are present (synthesizes a
+#      stub when the scan missed them).
+#   2. NOISE_PATTERNS — auto-flags known system shims as ``hidden=True`` so
+#      the GUI grid filters them by default. Users can unhide via the GUI.
+#   3. User overrides win — if a prior app.toml has explicit ``hidden=true``
+#      / ``hidden=false``, that decision persists across the next scan.
+
+# Curated essentials. Each entry's `name` becomes the slug and must satisfy
+# _SAFE_NAME_RE (lowercase, hyphens). `launch_uri` for UWP triggers the
+# shell:AppsFolder\<AUMID> launcher path; `executable` is the FreeRDP
+# RemoteApp program (explorer.exe is the standard launcher for UWP shells).
+ESSENTIAL_APPS: tuple[dict[str, str], ...] = (
+    {
+        "name": "file-explorer",
+        "full_name": "File Explorer",
+        "executable": "C:\\Windows\\explorer.exe",
+        "wm_class_hint": "explorer",
+        "source": "win32",
+    },
+    {
+        "name": "calculator",
+        "full_name": "Calculator",
+        "executable": "explorer.exe",
+        "launch_uri": "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App",
+        "wm_class_hint": "calculator",
+        "source": "uwp",
+    },
+    {
+        "name": "settings",
+        "full_name": "Settings",
+        "executable": "explorer.exe",
+        "launch_uri": (
+            "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel"
+        ),
+        "wm_class_hint": "settings",
+        "source": "uwp",
+    },
+)
+
+# Slugs in this set never get auto-hidden, even if a NOISE_PATTERN matches.
+# (No essentials should match a NOISE_PATTERN today, but keep the rule
+# explicit so future denylist edits can't accidentally hide a staple.)
+_ESSENTIAL_SLUGS = frozenset(e["name"] for e in ESSENTIAL_APPS)
+
+# Slug regexes that get auto-hidden. Lowercase + hyphens because that's the
+# slug shape (sanitized name). Patterns are intentionally narrow to avoid
+# catching legitimate apps; a false positive can be reverted with the GUI's
+# Show toggle, but a false negative (visible noise) is what users complain
+# about, so we err toward narrow patterns and let users hide more if they
+# want. Add new entries here when a noisy app surfaces in the wild.
+import re as _re  # noqa: E402 — local alias keeps the patterns readable inline
+
+NOISE_PATTERNS: tuple[_re.Pattern[str], ...] = tuple(
+    _re.compile(p, _re.IGNORECASE)
+    for p in (
+        # System shims and COM/IPC servers — never user-facing.
+        r"^license-?manager-?shell-?ext$",
+        r".*shell-?ext$",
+        r".*-com-server$",
+        r".*-package-manager-server.*",
+        r"^widgets-?platform-?runtime$",
+        r"^desktop-?package-?metadata$",
+        r"^microsoft-?store-?server$",
+        r"^microsoft-?r-?contacts-?import-?tool$",
+        # Internet Explorer is end-of-life and shouldn't be promoted.
+        r"^internet-explorer$",
+        r"^diagnostics-utility-for-internet-explorer$",
+    )
+)
+
+
+def _matches_noise(slug: str) -> bool:
+    """True when `slug` matches any NOISE_PATTERN. Whitelist always wins."""
+    if slug in _ESSENTIAL_SLUGS:
+        return False
+    return any(p.match(slug) for p in NOISE_PATTERNS)
+
+
+def _existing_hidden_override(app_dir: Path) -> bool | None:
+    """Return the user's prior `hidden` override if app.toml exists.
+
+    None means "no prior decision" — let the auto-classifier decide. True
+    or False means the user explicitly set it via the GUI Hide/Show
+    action and we must preserve their choice across rediscovery.
+    """
+    toml_path = app_dir / "app.toml"
+    if not toml_path.exists():
+        return None
+    try:
+        data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError, OSError):
+        return None
+    if "hidden" not in data:
+        return None
+    val = data.get("hidden")
+    return bool(val) if isinstance(val, bool) else None
+
+
+def _merge_essentials(scanned: list[DiscoveredApp]) -> list[DiscoveredApp]:
+    """Add ESSENTIAL_APPS stubs for any essential not already in `scanned`.
+
+    Match is by slug — if discovery already produced (e.g.) `file-explorer`,
+    the existing entry wins (it has the real icon bytes). Synthesized stubs
+    have no icon; the GUI falls back to a default icon glyph for them.
+    """
+    seen_slugs = {a.name for a in scanned}
+    out = list(scanned)
+    for spec in ESSENTIAL_APPS:
+        slug = spec["name"]
+        if slug in seen_slugs:
+            # Mark the existing entry as essential so it's flagged in
+            # the GUI / can never be hidden by the noise denylist.
+            for app in out:
+                if app.name == slug:
+                    app.essential = True
+                    break
+            continue
+        out.append(
+            DiscoveredApp(
+                name=slug,
+                full_name=spec.get("full_name", slug),
+                executable=spec.get("executable", ""),
+                source=spec.get("source", "win32"),
+                wm_class_hint=spec.get("wm_class_hint", ""),
+                launch_uri=spec.get("launch_uri", ""),
+                essential=True,
+            )
+        )
+    return out
 
 
 def discovered_apps_dir() -> Path:
@@ -593,6 +741,8 @@ def persist_discovered(
     apps: list[DiscoveredApp],
     target_dir: Path | None = None,
     replace: bool = True,
+    *,
+    add_essentials: bool = True,
 ) -> list[Path]:
     """Write discovered apps as ``<dir>/<name>/{app.toml, icon.*}`` entries.
 
@@ -610,6 +760,13 @@ def persist_discovered(
     root = target_dir if target_dir is not None else discovered_apps_dir()
     root.mkdir(parents=True, exist_ok=True)
 
+    # Hybrid filter step — guarantee essentials are present (synthesizing
+    # stubs when the scan missed them) before we touch disk. Tests can
+    # opt out via ``add_essentials=False`` to keep their fixtures
+    # isolated from the curated list.
+    if add_essentials:
+        apps = _merge_essentials(apps)
+
     written: list[Path] = []
     seen: set[str] = set()
     for app in apps:
@@ -620,6 +777,13 @@ def persist_discovered(
         seen.add(app.name)
 
         app_dir = root / app.name
+
+        # Read the user's prior hidden override BEFORE the rmtree below
+        # nukes it; the override (None / True / False) decides what gets
+        # stamped into the new app.toml so the user's choice is sticky
+        # across rediscovery sweeps.
+        prior_override = _existing_hidden_override(app_dir)
+
         if replace and app_dir.exists():
             _safe_rmtree(app_dir, root)
         app_dir.mkdir(parents=True, exist_ok=True)
@@ -629,6 +793,17 @@ def persist_discovered(
         # only when a valid image is written.
         app.slug = app.name
         app.icon_path = ""
+
+        # Resolve hidden state in priority order: explicit user override
+        # (None means no override) > essentials (never auto-hidden) >
+        # noise denylist (auto-hide). Result lands in app.toml so
+        # AppInfo.hidden reflects it on next load.
+        if prior_override is not None:
+            app.hidden = prior_override
+        elif app.essential:
+            app.hidden = False
+        else:
+            app.hidden = _matches_noise(app.name)
 
         toml_path = app_dir / "app.toml"
         try:
@@ -678,6 +853,13 @@ def _render_app_toml(app: DiscoveredApp) -> str:
         data["wm_class_hint"] = app.wm_class_hint
     if app.launch_uri:
         data["launch_uri"] = app.launch_uri
+    # Always emit hidden / essential when set so AppInfo.load_app picks
+    # them up. Keep the keys absent on the default-False side to keep
+    # toml diffs minimal for the common case (visible, non-essential).
+    if app.hidden:
+        data["hidden"] = True
+    if app.essential:
+        data["essential"] = True
     return toml_dumps(data)
 
 

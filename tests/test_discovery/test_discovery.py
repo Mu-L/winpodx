@@ -445,7 +445,7 @@ def test_persist_writes_app_toml(tmp_path):
         full_name="Example App",
         executable="C:\\Program Files\\Example\\example.exe",
     )
-    written = persist_discovered([app], target_dir=tmp_path)
+    written = persist_discovered([app], target_dir=tmp_path, add_essentials=False)
     assert len(written) == 1
     toml_path = written[0]
     assert toml_path.exists()
@@ -463,7 +463,7 @@ def test_persist_writes_png_icon(tmp_path):
         executable="C:\\example.exe",
         icon_bytes=png,
     )
-    persist_discovered([app], target_dir=tmp_path)
+    persist_discovered([app], target_dir=tmp_path, add_essentials=False)
     icon = tmp_path / "example-app" / "icon.png"
     assert icon.exists()
     assert icon.read_bytes() == png
@@ -476,7 +476,7 @@ def test_persist_writes_svg_icon(tmp_path):
         executable="C:\\example.exe",
         icon_bytes=_TINY_SVG,
     )
-    persist_discovered([app], target_dir=tmp_path)
+    persist_discovered([app], target_dir=tmp_path, add_essentials=False)
     icon = tmp_path / "example-app" / "icon.svg"
     assert icon.exists()
 
@@ -488,7 +488,7 @@ def test_persist_skips_unknown_icon_format(tmp_path):
         executable="C:\\example.exe",
         icon_bytes=b"\xff\xd8\xff\xe0 garbage jpeg",
     )
-    persist_discovered([app], target_dir=tmp_path)
+    persist_discovered([app], target_dir=tmp_path, add_essentials=False)
     app_dir = tmp_path / "example-app"
     # app.toml is still written but no icon file in a recognized format.
     assert (app_dir / "app.toml").exists()
@@ -501,7 +501,7 @@ def test_persist_deduplicates_by_slug(tmp_path):
     # Two apps with the same slug: second should be silently skipped.
     a = DiscoveredApp(name="example-app", full_name="A", executable="C:\\a.exe")
     b = DiscoveredApp(name="example-app", full_name="B", executable="C:\\b.exe")
-    written = persist_discovered([a, b], target_dir=tmp_path)
+    written = persist_discovered([a, b], target_dir=tmp_path, add_essentials=False)
     assert len(written) == 1
     # First-seen wins.
     content = (tmp_path / "example-app" / "app.toml").read_text()
@@ -515,7 +515,7 @@ def test_persist_replace_true_clears_old_entries(tmp_path):
     (stale / "stale.txt").write_text("leftover")
 
     app = DiscoveredApp(name="example-app", full_name="Fresh", executable="C:\\e.exe")
-    persist_discovered([app], target_dir=tmp_path, replace=True)
+    persist_discovered([app], target_dir=tmp_path, replace=True, add_essentials=False)
     assert not (stale / "stale.txt").exists()
     assert (stale / "app.toml").exists()
 
@@ -526,7 +526,7 @@ def test_persist_replace_false_preserves_old_entries(tmp_path):
     (stale_dir / "stale.txt").write_text("preserved")
 
     app = DiscoveredApp(name="example-app", full_name="Fresh", executable="C:\\e.exe")
-    persist_discovered([app], target_dir=tmp_path, replace=False)
+    persist_discovered([app], target_dir=tmp_path, replace=False, add_essentials=False)
     # app.toml still written (overwritten), but stale sibling stays.
     assert (stale_dir / "stale.txt").exists()
     assert (stale_dir / "app.toml").exists()
@@ -535,7 +535,7 @@ def test_persist_replace_false_preserves_old_entries(tmp_path):
 def test_persist_rejects_unsafe_slug(tmp_path):
     # _SAFE_NAME_RE gatekeeper blocks anything not matching [a-zA-Z0-9_-].
     bad = DiscoveredApp(name="has space", full_name="Bad", executable="C:\\b.exe")
-    written = persist_discovered([bad], target_dir=tmp_path)
+    written = persist_discovered([bad], target_dir=tmp_path, add_essentials=False)
     assert written == []
     assert not (tmp_path / "has space").exists()
 
@@ -798,7 +798,7 @@ def test_discovered_app_has_slug_and_icon_path_after_persist(tmp_path):
     assert app.slug == ""
     assert app.icon_path == ""
 
-    persist_discovered([app], target_dir=tmp_path)
+    persist_discovered([app], target_dir=tmp_path, add_essentials=False)
 
     assert app.slug == "example-app"
     expected_icon = (tmp_path / "example-app" / "icon.png").resolve()
@@ -809,7 +809,7 @@ def test_discovered_app_has_slug_and_icon_path_after_persist(tmp_path):
 def test_discovered_app_icon_path_empty_when_no_icon(tmp_path):
     """I2: slug still stamped even when no icon was supplied."""
     app = DiscoveredApp(name="no-icon", full_name="NoIcon", executable="C:\\x.exe")
-    persist_discovered([app], target_dir=tmp_path)
+    persist_discovered([app], target_dir=tmp_path, add_essentials=False)
     assert app.slug == "no-icon"
     assert app.icon_path == ""
 
@@ -859,7 +859,7 @@ def test_persist_rejects_malformed_png_but_persists_entry(tmp_path):
         executable="C:\\b.exe",
         icon_bytes=crafted,
     )
-    written = persist_discovered([app], target_dir=tmp_path)
+    written = persist_discovered([app], target_dir=tmp_path, add_essentials=False)
     assert len(written) == 1  # entry persists
     app_dir = tmp_path / "badpng-app"
     assert (app_dir / "app.toml").exists()
@@ -897,3 +897,88 @@ def test_discover_surfaces_timeout(tmp_path, monkeypatch):
         # Timeout is a channel-level failure; classifies as script_failed
         # since the script never got a chance to actually fail.
         assert excinfo.value.kind == "script_failed"
+
+
+# --- Hybrid filter: essentials allowlist + noise denylist ------------------
+# (P0 work for v0.3.x — file explorer always shows, system shims hidden,
+# user override survives rediscovery.)
+
+
+def test_essentials_synthesized_when_scan_misses_them(tmp_path):
+    """File Explorer / Calculator / Settings appear even when the guest
+    scan returns zero apps."""
+    written = persist_discovered([], target_dir=tmp_path, add_essentials=True)
+    slugs = {p.parent.name for p in written}
+    assert "file-explorer" in slugs
+    assert "calculator" in slugs
+    assert "settings" in slugs
+
+
+def test_essentials_marked_essential_in_toml(tmp_path):
+    """The synthesized stub gets ``essential = true`` so the GUI flags it."""
+    persist_discovered([], target_dir=tmp_path, add_essentials=True)
+    toml_text = (tmp_path / "file-explorer" / "app.toml").read_text()
+    assert "essential = true" in toml_text
+
+
+def test_existing_app_promoted_to_essential_when_slug_matches(tmp_path):
+    """If the scan already found 'file-explorer', we don't duplicate;
+    the existing entry is promoted with essential=True."""
+    scanned = DiscoveredApp(
+        name="file-explorer",
+        full_name="File Explorer",
+        executable="C:\\Windows\\explorer.exe",
+    )
+    written = persist_discovered([scanned], target_dir=tmp_path, add_essentials=True)
+    # No duplicate file-explorer entries.
+    explorer_paths = [p for p in written if p.parent.name == "file-explorer"]
+    assert len(explorer_paths) == 1
+    toml_text = explorer_paths[0].read_text()
+    assert "essential = true" in toml_text
+
+
+def test_noise_pattern_auto_hides_shim(tmp_path):
+    """A slug matching NOISE_PATTERNS gets ``hidden = true`` stamped."""
+    shim = DiscoveredApp(
+        name="licensemanagershellext",
+        full_name="LicenseManagerShellExt",
+        executable="C:\\Windows\\System32\\shim.exe",
+    )
+    persist_discovered([shim], target_dir=tmp_path, add_essentials=False)
+    toml_text = (tmp_path / "licensemanagershellext" / "app.toml").read_text()
+    assert "hidden = true" in toml_text
+
+
+def test_user_override_survives_rediscovery(tmp_path):
+    """If a user manually unhid an app (hidden = false in app.toml),
+    the next persist must keep it shown even when the noise pattern
+    would auto-hide it."""
+    # Plant the user's override.
+    app_dir = tmp_path / "microsoft-store-server"
+    app_dir.mkdir()
+    (app_dir / "app.toml").write_text(
+        'name = "microsoft-store-server"\n'
+        'full_name = "Microsoft Store Server"\n'
+        'executable = "C:\\\\x.exe"\n'
+        "hidden = false\n",
+        encoding="utf-8",
+    )
+    # Re-run persist with the same slug — the noise pattern matches but
+    # the user override should win.
+    rerun = DiscoveredApp(
+        name="microsoft-store-server",
+        full_name="Microsoft Store Server",
+        executable="C:\\x.exe",
+    )
+    persist_discovered([rerun], target_dir=tmp_path, add_essentials=False)
+    toml_text = (tmp_path / "microsoft-store-server" / "app.toml").read_text()
+    assert "hidden = true" not in toml_text
+
+
+def test_noise_pattern_yields_to_essential(tmp_path):
+    """Hypothetical: even if a noise pattern accidentally matched an
+    essential slug, the essential allowlist must take precedence so a
+    bad pattern can't hide File Explorer."""
+    persist_discovered([], target_dir=tmp_path, add_essentials=True)
+    toml_text = (tmp_path / "file-explorer" / "app.toml").read_text()
+    assert "hidden = true" not in toml_text

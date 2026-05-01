@@ -646,6 +646,21 @@ class WinpodxWindow(QMainWindow):
         toolbar.addWidget(self.refresh_btn)
         toolbar.addSpacing(6)
 
+        # Hybrid filter UX — hidden apps (system shims auto-filtered by the
+        # noise denylist, plus anything the user manually hid) collapse by
+        # default. Click to expand; the count tells the user how much got
+        # filtered so they can decide whether to dig in.
+        self._show_hidden = False
+        self.btn_show_hidden = QPushButton("Hidden")
+        self.btn_show_hidden.setCheckable(True)
+        self.btn_show_hidden.setStyleSheet(BTN_GHOST)
+        self.btn_show_hidden.setToolTip(
+            "Show apps filtered by the noise denylist or manually hidden"
+        )
+        self.btn_show_hidden.clicked.connect(self._on_toggle_hidden)
+        toolbar.addWidget(self.btn_show_hidden)
+        toolbar.addSpacing(6)
+
         add_btn = QPushButton("+  Add App")
         add_btn.setStyleSheet(BTN_PRIMARY)
         add_btn.clicked.connect(self._on_add_app)
@@ -681,7 +696,8 @@ class WinpodxWindow(QMainWindow):
         self.app_list_layout = QVBoxLayout(self.app_list_container)
         self.app_list_layout.setContentsMargins(0, 0, 0, 0)
         self.app_list_layout.setSpacing(0)
-        self._populate_app_view(self.apps)
+        self._refresh_hidden_button()
+        self._populate_app_view(self._visible_apps())
 
         scroll.setWidget(self.app_list_container)
         layout.addWidget(scroll)
@@ -946,9 +962,39 @@ class WinpodxWindow(QMainWindow):
 
         return tile
 
+    def _visible_apps(self) -> list[AppInfo]:
+        """Apps that should appear in the grid given the current Hidden toggle.
+
+        The hybrid filter sets ``hidden=True`` on noise-denylisted entries
+        and on anything the user manually hid; by default we exclude those
+        from the grid. Toggling "Hidden" includes them so the user can
+        unhide individual entries.
+        """
+        if self._show_hidden:
+            return list(self.apps)
+        return [a for a in self.apps if not a.hidden]
+
+    def _hidden_count(self) -> int:
+        return sum(1 for a in self.apps if a.hidden)
+
+    def _refresh_hidden_button(self) -> None:
+        n = self._hidden_count()
+        if n == 0:
+            self.btn_show_hidden.setVisible(False)
+            return
+        self.btn_show_hidden.setVisible(True)
+        prefix = "Showing" if self._show_hidden else "Hidden"
+        self.btn_show_hidden.setText(f"{prefix} ({n})")
+
+    def _on_toggle_hidden(self) -> None:
+        self._show_hidden = self.btn_show_hidden.isChecked()
+        self._refresh_hidden_button()
+        self._filter_apps(self.search_box.text())
+
     def _filter_apps(self, text: str) -> None:
         q = text.lower()
-        filtered = [a for a in self.apps if q in a.full_name.lower() or q in a.name.lower()]
+        base = self._visible_apps()
+        filtered = [a for a in base if q in a.full_name.lower() or q in a.name.lower()]
         if self._active_category:
             filtered = [a for a in filtered if self._active_category in a.categories]
         self._populate_app_view(filtered)
@@ -1994,9 +2040,11 @@ class WinpodxWindow(QMainWindow):
 
     def _reload_apps(self) -> None:
         self.apps = list_available_apps()
-        self._populate_app_view(self.apps)
+        self._refresh_hidden_button()
+        visible = self._visible_apps()
+        self._populate_app_view(visible)
         self.search_box.clear()
-        self.app_count_label.setText(f"{len(self.apps)} apps")
+        self.app_count_label.setText(f"{len(visible)} apps")
 
     def _on_refresh_apps(self) -> None:
         """Entry point for the "Refresh Apps" button; kicks off the QThread worker."""

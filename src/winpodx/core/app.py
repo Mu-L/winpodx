@@ -38,6 +38,16 @@ class AppInfo:
     args: str = ""
     wm_class_hint: str = ""
     launch_uri: str = ""  # UWP AUMID (shell:AppsFolder\<AUMID>)
+    # Hybrid filter state (set by discovery, overridable by the user via
+    # the GUI's "Hide / Show" action). The GUI grid filters where
+    # `hidden=True`; toggling adds an explicit override that survives
+    # the next discovery sweep so a user's preference is sticky.
+    hidden: bool = False
+    # True when this entry is in the curated essentials list (File
+    # Explorer, Calculator, Settings, …). Even when the guest scan
+    # missed it, persist_discovered() synthesizes a stub so essentials
+    # always appear. Users can still hide them.
+    essential: bool = False
 
 
 def user_apps_dir() -> Path:
@@ -101,6 +111,8 @@ def load_app(app_dir: Path, default_source: str = "user") -> AppInfo | None:
         args=data.get("args", "") or "",
         wm_class_hint=data.get("wm_class_hint", "") or "",
         launch_uri=data.get("launch_uri", "") or "",
+        hidden=bool(data.get("hidden", False)),
+        essential=bool(data.get("essential", False)),
     )
 
 

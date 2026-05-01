@@ -13,6 +13,12 @@ curl -fsSL https://raw.githubusercontent.com/kernalix7/winpodx/main/install.sh |
 # Latest main (development)
 curl -fsSL https://raw.githubusercontent.com/kernalix7/winpodx/main/install.sh | bash -s -- --main</code></pre>
 
+<a href="docs/images/demo.png">
+  <img src="docs/images/demo.png" alt="winpodx in action — Windows apps as native Linux windows on KDE" width="720">
+</a>
+
+<sub>Windows About / Performance Monitor / PowerShell each in their own Linux window, alongside the winpodx Apps grid.</sub>
+
 [![Beta](https://img.shields.io/badge/status-beta-orange?style=for-the-badge)](#status-beta)
 [![Latest](https://img.shields.io/github/v/release/kernalix7/winpodx?include_prereleases&style=for-the-badge&label=latest&color=2962FF)](https://github.com/kernalix7/winpodx/releases)
 

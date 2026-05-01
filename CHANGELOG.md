@@ -9,6 +9,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added
+- **Hybrid discovery filter — essentials always shown, system shims hidden by default.** Auto-discovery on a stock Windows 11 install used to surface ~45 entries with both classes of noise: OS staples like File Explorer / Calculator / Settings missing because they aren't enumerated as Start Menu .lnk files, and system shims (`LicenseManagerShellExt`, `WindowsPackageManagerServer`, `DesktopPackageMetadata`, `microsoft-store-server`, …) cluttering the grid. The filter now ships a curated essentials allowlist (synthesizes a stub when the scan misses an essential) and a noise denylist (auto-stamps `hidden = true` in `app.toml` so the GUI grid filters them). User overrides win — toggling Hide / Show on a tile records the preference in the same TOML and survives the next discovery sweep.
+- **GUI Apps page "Hidden (N)" toggle.** Hidden entries collapse by default; the count chip in the toolbar tells the user how many got filtered. Clicking the chip expands the grid to include them so the user can promote any that the denylist over-classified.
+- **Demo screenshot in README hero.** `docs/images/demo.png` (Windows About / Performance Monitor / PowerShell each in their own Linux window alongside the winpodx Apps grid) now ships at the top of the README so first-time visitors see what the integration looks like.
+
 ## [0.3.0] - 2026-04-30
 
 Major release — modular core, HTTP guest agent, and a comprehensive health-check surface. Replaces the FreeRDP RemoteApp pipeline as the default host→guest command channel.

@@ -9,6 +9,11 @@
 
 ## [Unreleased]
 
+### 추가
+- **하이브리드 디스커버리 필터 — 필수앱 항상 표시, 시스템 shim 기본 hide.** Windows 11 기본 install 에서 자동 디스커버리가 ~45개 entry 를 만드는데 두 종류 노이즈 같이 발생 — OS 필수앱 (File Explorer / Calculator / Settings) 은 Start Menu .lnk 로 enumerate 안 돼서 누락, 시스템 shim (`LicenseManagerShellExt`, `WindowsPackageManagerServer`, `DesktopPackageMetadata`, `microsoft-store-server` …) 들은 grid 어지럽힘. 필터가 이제 큐레이션된 essentials allowlist (스캔이 놓친 필수앱은 stub 합성) 와 noise denylist (`hidden = true` 자동 stamp 해서 GUI grid 가 거름) 를 같이 가짐. 사용자 override 가 우선 — 타일에 Hide / Show 토글하면 같은 TOML 에 기록돼서 다음 디스커버리 sweep 에서도 유지.
+- **GUI Apps 페이지 "Hidden (N)" 토글.** Hidden entry 는 기본 접힘; toolbar 의 count chip 이 몇 개 거른지 표시. chip 클릭하면 hidden 포함해서 grid 펼침 — denylist 가 과도하게 거른 항목 promote 가능.
+- **README 히어로에 데모 스크린샷.** `docs/images/demo.png` (Windows 정보 / 작업 관리자 / PowerShell 각각 Linux 창으로 winpodx Apps grid 와 나란히) 가 이제 README 상단에 — 처음 방문자가 통합 모습 바로 봄.
+
 ## [0.3.0] - 2026-04-30
 
 메이저 릴리스 — 모듈형 core 재구조, HTTP guest agent, 통합 헬스체크 surface. FreeRDP RemoteApp 파이프라인을 기본 host→guest 채널에서 대체.
