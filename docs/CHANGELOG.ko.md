@@ -9,6 +9,9 @@
 
 ## [Unreleased]
 
+### 수정
+- **`is_freerdp_pid()` 가 무관한 프로세스를 live RDP 세션으로 잘못 인식하던 거 해결.** 이전엔 `/proc/<pid>/cmdline` 안 어디든 `b"freerdp"` 또는 `b"xfreerdp"` 부분 문자열만 있으면 매치 — `~/freerdp-notes/run.sh` 같은 경로의 스크립트, `--deselect=test_freerdp_pid` 인자 가진 pytest 호출, 또는 어쩌다 인자에 freerdp 언급한 도구까지 다 잡혀서, winpodx 가 그것들을 본인이 spawn 한 FreeRDP 로 착각해 stale `.cproc` 마커가 영원히 reap 안 됐음. 이제 cmdline 을 null-byte 로 파싱해서 argv[0] basename 만 검사 — `find_freerdp()` 가 실제로 실행하는 바이너리들 (`xfreerdp{,3}`, `sdl-freerdp{,3}`, `flatpak run com.freerdp.FreeRDP` 폴백) 과만 매치. 부분문자열 매치로 새던 케이스 2개에 대한 회귀 테스트 추가. 하위 PID-reuse 테스트는 `bash -c "exec -a … sleep 30"` 없이 다시 작성 — 멀티콜 coreutils 환경에서도 안 깨짐. (Thanks @Mic92 — PR #63.)
+
 ### 변경
 - **기본 컨테이너 이미지 `docker.io/dockurr/windows:latest` 로 전환** (이전 `ghcr.io/dockur/windows:latest`). upstream 공식 compose / `docker run` 레퍼런스와 정렬 (upstream README 와 예제 `compose.yml` 모두 `dockurr/windows` 사용). 동일 이미지 — digest 로 검증됨. 일부 사용자가 GitHub Container Registry 경로에서 token / 4xx 에러 만남; Docker Hub 가 canonical artifact 를 안정적으로 제공. **기존 설치는 자동 마이그레이션 안 됨**: `~/.config/winpodx/winpodx.toml` 이 resolved 값을 persist 해서 이미 `winpodx setup` 돌린 사용자는 옛 레퍼런스 유지. 새 기본값 적용하려면 `winpodx.toml` 에서 `image = "ghcr.io/..."` 라인 삭제 후 `winpodx setup` 재실행 (`compose.yaml` 재생성), 또는 `~/.config/winpodx/compose.yaml` 직접 편집. (Thanks @Mic92 — PR #62.)
 - **PowerShell 창 깜빡임 0 — 게스트 경로가 hidden VBS 런처와 agent 트랜스포트로 모두 통합.** 3가지 수정 합쳐짐:
