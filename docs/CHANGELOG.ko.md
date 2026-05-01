@@ -10,6 +10,7 @@
 ## [Unreleased]
 
 ### 변경
+- **기본 컨테이너 이미지 `docker.io/dockurr/windows:latest` 로 전환** (이전 `ghcr.io/dockur/windows:latest`). upstream 공식 compose / `docker run` 레퍼런스와 정렬 (upstream README 와 예제 `compose.yml` 모두 `dockurr/windows` 사용). 동일 이미지 — digest 로 검증됨. 일부 사용자가 GitHub Container Registry 경로에서 token / 4xx 에러 만남; Docker Hub 가 canonical artifact 를 안정적으로 제공. **기존 설치는 자동 마이그레이션 안 됨**: `~/.config/winpodx/winpodx.toml` 이 resolved 값을 persist 해서 이미 `winpodx setup` 돌린 사용자는 옛 레퍼런스 유지. 새 기본값 적용하려면 `winpodx.toml` 에서 `image = "ghcr.io/..."` 라인 삭제 후 `winpodx setup` 재실행 (`compose.yaml` 재생성), 또는 `~/.config/winpodx/compose.yaml` 직접 편집. (Thanks @Mic92 — PR #62.)
 - **PowerShell 창 깜빡임 0 — 게스트 경로가 hidden VBS 런처와 agent 트랜스포트로 모두 통합.** 3가지 수정 합쳐짐:
   - **Agent 자동시작이 `hidden-launcher.vbs` 경유.** HKCU\Run 이 `powershell.exe -WindowStyle Hidden -File C:\OEM\agent.ps1` 을 등록했는데, Hidden 플래그는 PowerShell 이 conhost 할당한 *후에* 적용되므로 사용자 로그인마다 ~50ms 짜리 PS 콘솔이 깜빡였음. 새 VBS wrapper 는 GUI 서브시스템 (자체 콘솔 없음) 이고 `WshShell.Run intWindowStyle=0` 이 `SW_HIDE` 를 `CreateProcess` 에 전달해서 spawn 된 PowerShell 이 windowless 로 시작됨.
   - **UWP launch 가 `IApplicationActivationManager` 경유.** 기존 `/app:program:explorer.exe,cmd:shell:AppsFolder\<AUMID>` 가 UWP 프레임이 뜨기 전에 explorer.exe RemoteApp 윈도를 ~300ms 보여줬음 — Calculator / Settings / Terminal 에서 사용자가 보던 "PowerShell 같은 깜빡임" 이 그거. RemoteApp 이 이제 `wscript.exe launch_uwp.vbs <AUMID>` 호출 → `IApplicationActivationManager::ActivateApplication` 직접 호출. UWP 프레임이 transition 없이 RemoteApp 윈도로 바로 등장; ~300ms 도 단축.
