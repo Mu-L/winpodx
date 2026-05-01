@@ -476,7 +476,7 @@ try {
 # the icon from the same AppxManifest path the main UWP scan uses. Skips
 # silently if the package isn't installed (some Windows SKUs ship without
 # Calculator on the Server image, for example).
-function Emit-EssentialUwp([string]$FamilyPrefix, [string]$DisplayName, [string]$AppId, [string]$WmClassHint) {
+function Emit-EssentialUwp([string]$FamilyPrefix, [string]$DisplayName, [string]$AppId, [string]$WmClassHint, [string]$DefaultDescription = '') {
     try {
         $pkg = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue |
             Where-Object { $_.PackageFamilyName -like "$FamilyPrefix*" } |
@@ -553,6 +553,14 @@ function Emit-EssentialUwp([string]$FamilyPrefix, [string]$DisplayName, [string]
             }
         } catch { }
 
+        # Fall back to a curated one-liner when the manifest's Description
+        # was an ms-resource: indirection (PowerShell can't resolve those
+        # in a non-interactive session, so we'd otherwise stamp the
+        # generic 'Windows application via winpodx' for staples).
+        if (-not $emitDesc -and $DefaultDescription) {
+            $emitDesc = $DefaultDescription
+        }
+
         Add-Result @{
             name          = $DisplayName
             description   = $emitDesc
@@ -566,8 +574,10 @@ function Emit-EssentialUwp([string]$FamilyPrefix, [string]$DisplayName, [string]
     } catch { }
 }
 
-Emit-EssentialUwp 'Microsoft.WindowsCalculator_' 'Calculator' 'App' 'calculator'
-Emit-EssentialUwp 'windows.immersivecontrolpanel_' 'Settings' 'microsoft.windows.immersivecontrolpanel' 'settings'
+Emit-EssentialUwp 'Microsoft.WindowsCalculator_' 'Calculator' 'App' 'calculator' `
+    'Calculator app from the Windows guest'
+Emit-EssentialUwp 'windows.immersivecontrolpanel_' 'Settings' 'microsoft.windows.immersivecontrolpanel' 'settings' `
+    'Open the Windows guest Settings panel'
 
 # --- Emit JSON -------------------------------------------------------------
 
