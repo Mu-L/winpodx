@@ -4,7 +4,11 @@
     <param name="scm">git</param>
     <param name="revision">main</param>
     <param name="versionformat">@PARENT_TAG@</param>
-    <param name="versionrewrite-pattern">v(.*)</param>
+    <!-- Strip leading 'v' AND any '-RTM*' / pre-release suffix.
+         RPM Version: forbids '-' (Version/Release delimiter), so we
+         must capture only the dotted core. v0.3.0-RTM1 -> 0.3.0,
+         v0.3.0 -> 0.3.0, v0.3.1-rc2 -> 0.3.1. -->
+    <param name="versionrewrite-pattern">v([^-]+).*</param>
     <param name="versionrewrite-replacement">\1</param>
     <param name="match-tag">v*</param>
     <param name="filename">winpodx</param>
