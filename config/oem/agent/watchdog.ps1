@@ -1,20 +1,32 @@
 # =====================================================================
-# watchdog.ps1 -- in-process agent watchdog for the agent-first install.
+# watchdog.ps1 -- agent /health watchdog (install-time + steady-state).
 #
 # Launched from HKCU\Run\WinpodxAgent. First action on launch is to
 # spawn agent.ps1 if /health doesn't already answer 200 -- so the same
 # entry covers (a) cold-boot autostart and (b) respawn-on-crash without
 # needing a separate agent.ps1 entry in HKCU\Run.
 #
-# Loop:
-#   * Poll http://127.0.0.1:8765/health every 30s.
-#   * On a probe failure: 2x retry with 2s and 5s backoff. Only after
-#     two further consecutive failures do we count this as a death --
-#     short Defender / TermService stalls don't trip the respawn cycle.
-#   * On confirmed death: Start-Process agent.ps1, wait up to 60s for
-#     /health to come back. Reset death counter on success.
-#   * 3 consecutive failed respawn cycles -> Write-WinpodxFailure +
-#     exit 1.
+# Two operating modes, branched on the install_complete marker:
+#
+#   INSTALL MODE (no install_complete.done present):
+#     * 30s poll, 2s/5s debounce.
+#     * Respawn after confirmed death; 60s grace for /health.
+#     * 3 consecutive failed cycles -> Write-WinpodxFailure + exit 1
+#       (signals install-resume the install can't proceed).
+#     * Log target: install.log (the canonical install-time stream).
+#
+#   STEADY-STATE MODE (install_complete.done present):
+#     * 30s poll, 2s/5s debounce -- same as install mode.
+#     * Indefinite respawn with exponential backoff: 30s, 60s, 120s,
+#       240s, 300s (cap at 5 min). Counter never resets to 3-fail
+#       hard-exit -- after install completes, a transient flap should
+#       NOT leave the user agentless until reboot. (security review #6)
+#     * Log target: watchdog.log only (NOT install.log -- avoids
+#       indefinite log growth during long-lived sessions).
+#
+# Mode is re-evaluated on every loop iteration: an install that
+# completes mid-watchdog-life transitions cleanly to steady-state on
+# the next poll without restarting the watchdog.
 #
 # This script depends on install-state-helpers.ps1 having been staged
 # alongside it (install.bat copies both to C:\winpodx\agent\). If the
@@ -29,11 +41,20 @@ $script:HelperPath  = 'C:\winpodx\agent\install-state-helpers.ps1'
 $script:OemHelper   = 'C:\OEM\install-state-helpers.ps1'
 $script:AgentScript = 'C:\winpodx\agent\agent.ps1'
 $script:HealthUrl   = 'http://127.0.0.1:8765/health'
-$script:LogFallback = 'C:\winpodx\install-state\watchdog.log'
+$script:StateDir    = 'C:\winpodx\install-state'
+$script:CompleteMarker = 'C:\winpodx\install-state\install_complete.done'
+$script:WatchdogLog = 'C:\winpodx\install-state\watchdog.log'
+
+# Install-mode timings (unchanged).
 $script:PollSec       = 30
 $script:DebounceSecs  = @(2, 5)
 $script:RespawnGrace  = 60
 $script:MaxRespawns   = 3
+
+# Steady-state backoff schedule. Each entry is the wait between the
+# end of one respawn cycle and the start of the next. Last value
+# stays in effect indefinitely (no exit, no reset).
+$script:SteadyBackoffSecs = @(30, 60, 120, 240, 300)
 
 # Try to load the shared helpers. The watchdog is launched from
 # HKCU\Run *after* install.bat has run Phase 1, so the helpers should
@@ -50,20 +71,51 @@ foreach ($p in @($script:HelperPath, $script:OemHelper)) {
     }
 }
 
+# Steady-state log target -- always usable, no helpers required.
+function Write-WatchdogLog([string]$Level, [string]$Event, $Extra = $null) {
+    $ts = (Get-Date).ToUniversalTime().ToString('o')
+    $record = [ordered]@{
+        ts    = $ts
+        level = $Level
+        step  = 'watchdog'
+        event = $Event
+    }
+    if ($null -ne $Extra -and $Extra -is [hashtable]) {
+        foreach ($k in $Extra.Keys) {
+            if (-not $record.Contains($k)) { $record[$k] = $Extra[$k] }
+        }
+    }
+    $line = ($record | ConvertTo-Json -Compress -Depth 4)
+    try {
+        $dir = Split-Path -Parent $script:WatchdogLog
+        if (-not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+        Add-Content -LiteralPath $script:WatchdogLog -Value $line -ErrorAction SilentlyContinue
+    } catch { }
+}
+
+# Bare fallback for cases where neither install.log nor watchdog.log
+# is reachable (extremely degraded state).
 function Write-Bare([string]$Level, [string]$Event, [string]$Detail) {
     $ts = (Get-Date).ToUniversalTime().ToString('o')
     $line = "$ts $Level watchdog $Event"
     if ($Detail) { $line = "$line detail=$Detail" }
     try {
-        $dir = Split-Path -Parent $script:LogFallback
+        $dir = Split-Path -Parent $script:WatchdogLog
         if (-not (Test-Path -LiteralPath $dir)) {
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
         }
-        Add-Content -LiteralPath $script:LogFallback -Value $line -ErrorAction SilentlyContinue
+        Add-Content -LiteralPath $script:WatchdogLog -Value $line -ErrorAction SilentlyContinue
     } catch { }
 }
 
+# Logger that picks install.log or watchdog.log based on mode.
 function Log-Event([string]$Level, [string]$Event, $Extra = $null) {
+    if (Test-SteadyState) {
+        Write-WatchdogLog $Level $Event $Extra
+        return
+    }
     if ($script:HelpersLoaded) {
         try {
             if ($Extra) {
@@ -76,6 +128,10 @@ function Log-Event([string]$Level, [string]$Event, $Extra = $null) {
     }
     $detail = if ($Extra) { ($Extra | ConvertTo-Json -Compress -Depth 4) } else { '' }
     Write-Bare $Level $Event $detail
+}
+
+function Test-SteadyState {
+    return [bool](Test-Path -LiteralPath $script:CompleteMarker -PathType Leaf)
 }
 
 function Test-Health {
@@ -127,7 +183,7 @@ function Wait-Healthy {
     return $false
 }
 
-Log-Event 'INFO' 'started'
+Log-Event 'INFO' 'started' @{ steady = (Test-SteadyState) }
 
 # Cold-boot path: agent might not be running at all. Try once before
 # the loop so the autostart case doesn't have to wait for the first
@@ -139,6 +195,7 @@ if (-not (Test-Health)) {
 }
 
 $consecutiveFailures = 0
+$steadyCycleIdx = 0
 $lastState = 'unknown'
 
 while ($true) {
@@ -150,6 +207,7 @@ while ($true) {
             $lastState = 'up'
         }
         $consecutiveFailures = 0
+        $steadyCycleIdx = 0
         continue
     }
 
@@ -159,35 +217,65 @@ while ($true) {
     }
 
     $consecutiveFailures += 1
-    Log-Event 'WARN' 'respawn_cycle_start' @{ cycle = $consecutiveFailures }
+    $steady = Test-SteadyState
+
+    Log-Event 'WARN' 'respawn_cycle_start' @{
+        cycle  = $consecutiveFailures
+        steady = $steady
+    }
 
     if (-not (Start-Agent)) {
         # spawn_failed already logged.
     }
 
     if (Wait-Healthy) {
-        Log-Event 'INFO' 'respawn_recovered' @{ cycle = $consecutiveFailures }
+        Log-Event 'INFO' 'respawn_recovered' @{
+            cycle  = $consecutiveFailures
+            steady = $steady
+        }
         $consecutiveFailures = 0
+        $steadyCycleIdx = 0
         $lastState = 'up'
         continue
     }
 
-    Log-Event 'ERROR' 'respawn_failed' @{ cycle = $consecutiveFailures }
-
-    if ($consecutiveFailures -ge $script:MaxRespawns) {
-        Log-Event 'ERROR' 'respawn_budget_exhausted' @{ max = $script:MaxRespawns }
-        if ($script:HelpersLoaded) {
-            try {
-                Write-WinpodxFailure `
-                    -Step 'agent_ready' -Phase 1 `
-                    -Attempt $consecutiveFailures -MaxAttempts $script:MaxRespawns `
-                    -ExitCode 1 `
-                    -ErrorClass 'agent_watchdog_exhausted' `
-                    -ErrorSummary "watchdog exhausted $($script:MaxRespawns) respawn cycles"
-            } catch {
-                Write-Bare 'ERROR' 'failure_record_write_failed' $_.Exception.Message
-            }
-        }
-        exit 1
+    Log-Event 'ERROR' 'respawn_failed' @{
+        cycle  = $consecutiveFailures
+        steady = $steady
     }
+
+    if (-not $steady) {
+        # INSTALL MODE: hard-exit after MaxRespawns to surface the
+        # failure into install_failure.json so install-resume can act.
+        if ($consecutiveFailures -ge $script:MaxRespawns) {
+            Log-Event 'ERROR' 'respawn_budget_exhausted' @{ max = $script:MaxRespawns }
+            if ($script:HelpersLoaded) {
+                try {
+                    Write-WinpodxFailure `
+                        -Step 'agent_ready' -Phase 1 `
+                        -Attempt $consecutiveFailures -MaxAttempts $script:MaxRespawns `
+                        -ExitCode 1 `
+                        -ErrorClass 'agent_watchdog_exhausted' `
+                        -ErrorSummary "watchdog exhausted $($script:MaxRespawns) respawn cycles"
+                } catch {
+                    Write-Bare 'ERROR' 'failure_record_write_failed' $_.Exception.Message
+                }
+            }
+            exit 1
+        }
+        # Below the install-mode budget -- loop continues with PollSec.
+        continue
+    }
+
+    # STEADY-STATE MODE: indefinite respawn with exponential backoff.
+    # Never exits. Counter never resets to a hard-fail. A transient
+    # agent flap post-install must NOT leave the user agentless.
+    $idx = [Math]::Min($steadyCycleIdx, $script:SteadyBackoffSecs.Length - 1)
+    $waitSecs = $script:SteadyBackoffSecs[$idx]
+    Log-Event 'WARN' 'steady_backoff' @{
+        cycle      = $consecutiveFailures
+        wait_secs  = $waitSecs
+    }
+    Start-Sleep -Seconds $waitSecs
+    $steadyCycleIdx += 1
 }

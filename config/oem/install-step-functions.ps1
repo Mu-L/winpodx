@@ -49,10 +49,14 @@ Set-StrictMode -Version Latest
 $script:WpxStateDir       = 'C:\winpodx\install-state'
 $script:WpxAgentDir       = 'C:\winpodx\agent'
 $script:WpxOemDir         = 'C:\OEM'
-$script:WpxOemAgentDir    = 'C:\OEM\agent'
 $script:WpxLaunchersDir   = 'C:\Users\Public\winpodx\launchers'
 $script:WpxRdprrapDir     = 'C:\winpodx\rdprrap'
-$script:WpxAgentTokenSrc  = 'C:\OEM\agent\agent_token.txt'
+# Token lives at the root of C:\OEM\, NOT under C:\OEM\agent\. Single
+# source of truth: src/winpodx/utils/agent_token.py stages it as
+# <oem_dir>/agent_token.txt, and config/oem/agent/agent.ps1 reads
+# C:\OEM\agent_token.txt. agent.ps1 itself ships under agent\ but the
+# token does not. (security review #1)
+$script:WpxAgentTokenSrc  = 'C:\OEM\agent_token.txt'
 $script:WpxAgentTokenDst  = 'C:\winpodx\agent\agent_token.txt'
 $script:WpxAgentScriptSrc = 'C:\OEM\agent\agent.ps1'
 $script:WpxAgentScriptDst = 'C:\winpodx\agent\agent.ps1'
@@ -337,6 +341,21 @@ function Invoke-Step-token_staged {
                     -Event 'src_missing' -Extra @{ src = $script:WpxAgentTokenSrc }
                 return 1
             }
+
+            $user = "$env:USERDOMAIN\$env:USERNAME"
+            if (-not $env:USERDOMAIN) { $user = $env:USERNAME }
+
+            # Tighten the OEM-source ACL BEFORE reading. dockur lays the
+            # OEM bind mount with default permissions, leaving the token
+            # readable to BUILTIN\Users for the ~60-90s window between
+            # Phase 0 (Defender exclusion) and this step. Tightening the
+            # source first ensures no other user (or background process)
+            # can read the token while we're staging it. Read-only here
+            # because we never write back to the OEM source after this.
+            # (security review #12)
+            & icacls.exe $script:WpxAgentTokenSrc /inheritance:r 2>&1 | Out-Null
+            & icacls.exe $script:WpxAgentTokenSrc /grant:r ("${user}:R") 2>&1 | Out-Null
+
             $dstDir = Split-Path -Parent $script:WpxAgentTokenDst
             if (-not (Test-Path -LiteralPath $dstDir)) {
                 New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
@@ -344,11 +363,10 @@ function Invoke-Step-token_staged {
             Copy-Item -LiteralPath $script:WpxAgentTokenSrc `
                 -Destination $script:WpxAgentTokenDst -Force
 
-            # User-only ACL: remove inherited, grant current user R+W,
-            # deny everyone else implicitly. icacls is more reliable than
-            # PS Acl APIs against Windows's odd default DACLs on copies.
-            $user = "$env:USERDOMAIN\$env:USERNAME"
-            if (-not $env:USERDOMAIN) { $user = $env:USERNAME }
+            # User-only ACL on the dst: remove inherited, grant current
+            # user R+W, deny everyone else implicitly. icacls is more
+            # reliable than PS Acl APIs against Windows's odd default
+            # DACLs on copies.
             & icacls.exe $script:WpxAgentTokenDst /inheritance:r 2>&1 | Out-Null
             & icacls.exe $script:WpxAgentTokenDst /grant:r ("${user}:(R,W)") 2>&1 | Out-Null
             return 0
@@ -781,23 +799,46 @@ exit $rc
 # --- Phase 3: install_complete ---------------------------------------
 
 function Invoke-Step-install_complete {
-    # Token rotation + final marker. The new token is generated via
-    # /exec, written to C:\winpodx\agent\agent_token.txt with the same
-    # ACL as Phase 0.6, and the old C:\OEM\agent\agent_token.txt is
-    # zeroed + deleted. The agent re-reads the staged token on next
-    # cold start; in-process the old token still works until then,
-    # which is fine since the install is complete and /exec falls
-    # silent until the host explicitly rotates.
+    # Token rotation + final marker. The new token is generated locally
+    # (32 RNG bytes -> base64), written to C:\winpodx\agent\agent_token.txt
+    # with the same ACL as Phase 0.6, and the OEM-source token at
+    # C:\OEM\agent_token.txt is zeroed + deleted. The agent re-reads the
+    # staged token on next cold start.
+    #
+    # Cleanup is HARD post-condition (security review #2): if the OEM
+    # source file still exists after the body runs (read-only mount,
+    # access-denied), the rotation hasn't taken effect -- the old
+    # plaintext token is still on disk. Step fails -> retry kicks in
+    # -> eventually Write-WinpodxFailure. This is the opposite of the
+    # earlier warn-and-continue, which combined with the path bug in
+    # security review #1 made rotation a no-op.
     Invoke-WinpodxStep `
         -Name 'install_complete' -Phase 3 -ErrorClass 'install_complete_failed' `
         -VerifyPreCondition { Test-WinpodxAgentReady } `
         -VerifyPostCondition {
-            (Test-Path -LiteralPath (Join-Path $script:WpxStateDir 'install_complete.done')) -or `
-            (Test-Path -LiteralPath $script:WpxAgentTokenDst)
+            # Three conjuncts -- all must hold:
+            #   1. New token exists at the staged location.
+            #   2. OEM-source token is gone (rotation hygiene).
+            #   3. Or, if the file still exists, its contents are zero
+            #      bytes (zeroing succeeded but Remove-Item was denied).
+            #      Acceptable end state -- old plaintext is unrecoverable.
+            if (-not (Test-Path -LiteralPath $script:WpxAgentTokenDst)) { return $false }
+            try {
+                $t = (Get-Content -Path $script:WpxAgentTokenDst -TotalCount 1 -ErrorAction Stop).Trim()
+            } catch { return $false }
+            if (-not $t) { return $false }
+
+            if (-not (Test-Path -LiteralPath $script:WpxAgentTokenSrc)) { return $true }
+            try {
+                $bytes = [IO.File]::ReadAllBytes($script:WpxAgentTokenSrc)
+            } catch { return $false }
+            if ($bytes.Length -eq 0) { return $true }
+            foreach ($b in $bytes) { if ($b -ne 0) { return $false } }
+            return $true
         } `
         -Body {
             # Generate 32 random bytes -> base64 (44 chars). Use
-            # RNGCryptoServiceProvider for cryptographic strength.
+            # RandomNumberGenerator for cryptographic strength.
             $rng   = [System.Security.Cryptography.RandomNumberGenerator]::Create()
             $bytes = New-Object byte[] 32
             $rng.GetBytes($bytes)
@@ -811,21 +852,42 @@ function Invoke-Step-install_complete {
             & icacls.exe $script:WpxAgentTokenDst /inheritance:r 2>&1 | Out-Null
             & icacls.exe $script:WpxAgentTokenDst /grant:r ("${user}:(R,W)") 2>&1 | Out-Null
 
-            # Zero + delete the OEM-staged copy. Best-effort -- the
-            # OEM bind mount may have made it read-only; in that case
-            # the next pod restart will overwrite it.
-            try {
-                if (Test-Path -LiteralPath $script:WpxAgentTokenSrc) {
-                    $sz = (Get-Item -LiteralPath $script:WpxAgentTokenSrc).Length
-                    if ($sz -gt 0) {
+            # Zero + delete the OEM-source token. Failure here is
+            # propagated up -- the post-condition will catch it, the
+            # retry loop will run again, and Write-WinpodxFailure will
+            # eventually fire if cleanup never succeeds. We log the
+            # specific failure mode (write vs delete) so operators can
+            # tell read-only-mount apart from permission errors.
+            if (Test-Path -LiteralPath $script:WpxAgentTokenSrc) {
+                $sz = 0
+                try {
+                    $sz = (Get-Item -LiteralPath $script:WpxAgentTokenSrc -ErrorAction Stop).Length
+                } catch {
+                    Write-WinpodxLog -Level 'ERROR' -Step 'install_complete' `
+                        -Event 'oem_token_stat_failed' -Extra @{ detail = $_.Exception.Message }
+                    return 1
+                }
+                if ($sz -gt 0) {
+                    try {
                         $zeros = [byte[]]::new($sz)
                         [IO.File]::WriteAllBytes($script:WpxAgentTokenSrc, $zeros)
+                    } catch {
+                        Write-WinpodxLog -Level 'ERROR' -Step 'install_complete' `
+                            -Event 'oem_token_zero_failed' -Extra @{ detail = $_.Exception.Message }
+                        return 1
                     }
-                    Remove-Item -LiteralPath $script:WpxAgentTokenSrc -Force -ErrorAction SilentlyContinue
                 }
-            } catch {
-                Write-WinpodxLog -Level 'WARN' -Step 'install_complete' `
-                    -Event 'oem_token_cleanup_failed' -Extra @{ detail = $_.Exception.Message }
+                try {
+                    Remove-Item -LiteralPath $script:WpxAgentTokenSrc -Force -ErrorAction Stop
+                } catch {
+                    # Zeroing succeeded; delete denied. Old plaintext
+                    # is unrecoverable, so the post-condition's
+                    # "all-zero file" branch returns $true and the step
+                    # passes. Log the failure for forensic visibility.
+                    Write-WinpodxLog -Level 'WARN' -Step 'install_complete' `
+                        -Event 'oem_token_delete_denied_zeroed_ok' `
+                        -Extra @{ detail = $_.Exception.Message }
+                }
             }
             return 0
         }
