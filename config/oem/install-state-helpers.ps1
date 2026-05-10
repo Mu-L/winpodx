@@ -29,8 +29,10 @@
 # agent_install_state.redact_log_line for any input):
 #   1. net user <user> <pw>                  -> net user <user> <REDACTED>
 #   2. Authorization: Bearer <tok>           -> Authorization: Bearer <REDACTED>
-#   3. password=/token=/apikey=/api_key=     -> <key>=<REDACTED>   (case-insensitive)
-#   4. base64-ish blob >= 40 chars           -> <BASE64-REDACTED>
+#   3. xfreerdp /p:|/password:|-p: <pw>      -> /p:<REDACTED> etc. (case-sensitive)
+#   4. xfreerdp /p|-p <pw> (space form)      -> /p <REDACTED> etc. (case-sensitive)
+#   5. password=/token=/apikey=/api_key=     -> <key>=<REDACTED>   (case-insensitive)
+#   6. base64-ish blob >= 40 chars           -> <BASE64-REDACTED>
 #
 # Helpers do NOT swallow exceptions; the caller (install.bat
 # orchestrator) decides how to react to a failure.
@@ -68,6 +70,14 @@ $PHASE_ORDER = @(
 # Compiled regexes -- keep parity with agent_install_state.py.
 $script:WpxNetUserRe   = [regex]::new('(net user\s+\S+\s+)\S+', 'IgnoreCase')
 $script:WpxAuthBearerRe = [regex]::new('(Authorization:\s*Bearer\s+)\S+', 'IgnoreCase')
+# xfreerdp/wfreerdp connection password (security review #8). Colon and
+# space forms tracked separately: xfreerdp tolerates both. Case-sensitive,
+# matching the host-side PasswordFilter in src/winpodx/utils/logging.py
+# and xfreerdp's lowercase argv convention. False positives on bare
+# `-p <path>` (mkdir, tar, ...) are accepted -- masking a path is the
+# safer error mode than leaking a real password.
+$script:WpxFreerdpPwColonRe = [regex]::new('(/p:|/password:|-p:)([^\s]+)')
+$script:WpxFreerdpPwSpaceRe = [regex]::new('(/p\s+|-p\s+)(\S+)')
 $script:WpxKvSecretRe  = [regex]::new(
     '\b(password|token|apikey|api_key)\s*=\s*([^\s''"&]+)',
     'IgnoreCase'
@@ -309,7 +319,7 @@ Reset-WinpodxRetry -Name 'rdprrap_installed'
 function Invoke-WinpodxRedact {
 <#
 .SYNOPSIS
-Strip secrets (net user pw, Authorization Bearer, password=/token=/apikey=, base64 >= 40) from $Line.
+Strip secrets (net user pw, Authorization Bearer, xfreerdp /p:&lt;pw&gt;, password=/token=/apikey=, base64 >= 40) from $Line.
 .EXAMPLE
 $safe = Invoke-WinpodxRedact -Line $rawLogLine
 #>
@@ -327,6 +337,8 @@ $safe = Invoke-WinpodxRedact -Line $rawLogLine
     # byte-identical for any input. .NET regex back-reference uses $1.
     $out = $script:WpxNetUserRe.Replace($Line, ('$1' + $script:WpxRedacted))
     $out = $script:WpxAuthBearerRe.Replace($out, ('$1' + $script:WpxRedacted))
+    $out = $script:WpxFreerdpPwColonRe.Replace($out, ('$1' + $script:WpxRedacted))
+    $out = $script:WpxFreerdpPwSpaceRe.Replace($out, ('$1' + $script:WpxRedacted))
     $out = $script:WpxKvSecretRe.Replace($out, ('$1=' + $script:WpxRedacted))
     $out = $script:WpxBase64Re.Replace($out, $script:WpxBase64Redacted)
     return $out

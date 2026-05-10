@@ -58,6 +58,15 @@ _BASE64_REDACTED = "<BASE64-REDACTED>"
 # redact it but with a less informative tag).
 _NET_USER_RE = re.compile(r"(net user\s+\S+\s+)\S+", re.IGNORECASE)
 _AUTH_BEARER_RE = re.compile(r"(Authorization:\s*Bearer\s+)\S+", re.IGNORECASE)
+# xfreerdp / wfreerdp expose the connection password via /p:, /password:, or
+# -p: (colon-attached form) and via /p / -p (space-separated form). Mirrors
+# utils.logging.PasswordFilter._mask_value's coverage so install.log and
+# install_failure.json don't carry credentials when install.bat shells out
+# to FreeRDP. False positives on `mkdir -p <path>` etc. are accepted: the
+# alternative is risking a real password leak. Case-sensitive (matches the
+# host-side filter and xfreerdp's own lowercase argv convention).
+_FREERDP_PW_COLON_RE = re.compile(r"(/p:|/password:|-p:)([^\s]+)")
+_FREERDP_PW_SPACE_RE = re.compile(r"(/p\s+|-p\s+)(\S+)")
 _KV_SECRET_RE = re.compile(
     r"\b(password|token|apikey|api_key)\s*=\s*([^\s'\"&]+)",
     re.IGNORECASE,
@@ -205,9 +214,13 @@ def redact_log_line(line: str) -> str:
 
     1. ``net user <user> <pw>`` argv -> ``net user <user> <REDACTED>``
     2. ``Authorization: Bearer <token>`` -> ``Authorization: Bearer <REDACTED>``
-    3. ``password=``/``token=``/``apikey=``/``api_key=`` (case-insensitive)
+    3. xfreerdp/wfreerdp ``/p:``/``/password:``/``-p:`` colon argv ->
+       ``<flag><REDACTED>``
+    4. xfreerdp/wfreerdp ``/p`` / ``-p`` space-separated argv ->
+       ``<flag> <REDACTED>``
+    5. ``password=``/``token=``/``apikey=``/``api_key=`` (case-insensitive)
        up to next whitespace or quote -> ``<KEY>=<REDACTED>``
-    4. Bare base64-ish blobs of 40+ chars -> ``<BASE64-REDACTED>``
+    6. Bare base64-ish blobs of 40+ chars -> ``<BASE64-REDACTED>``
 
     Non-string input is coerced to ``str`` (caller's contract -- this is a
     last line of defence and we should not crash logging on a stray int).
@@ -218,6 +231,8 @@ def redact_log_line(line: str) -> str:
         return line
     out = _NET_USER_RE.sub(rf"\1{_REDACTED}", line)
     out = _AUTH_BEARER_RE.sub(rf"\1{_REDACTED}", out)
+    out = _FREERDP_PW_COLON_RE.sub(rf"\1{_REDACTED}", out)
+    out = _FREERDP_PW_SPACE_RE.sub(rf"\1{_REDACTED}", out)
     out = _KV_SECRET_RE.sub(lambda m: f"{m.group(1)}={_REDACTED}", out)
     out = _BASE64_RE.sub(_BASE64_REDACTED, out)
     return out
