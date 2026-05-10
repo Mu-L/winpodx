@@ -205,24 +205,36 @@ def test_step_functions_phase06_checks_lastexitcode_on_icacls() -> None:
     assert "icacls_dst_failed" in body
 
 
-def test_watchdog_branches_on_install_complete_marker() -> None:
-    """Security review #6: watchdog must branch behaviour on the
-    install_complete marker -- 3-cycle hard-exit during install, but
-    indefinite respawn with exponential backoff in steady state.
-    Pin both the marker constant and the steady backoff schedule."""
+def test_watchdog_never_hard_exits() -> None:
+    """Smoke test 2026-05-10: the prior 3-cycle hard-exit in install
+    mode left the guest permanently agentless when any Phase 2 bug
+    prevented install_complete.done from being written. The user is
+    still logged in from autologon, so install-resume's logon trigger
+    never fires, and the watchdog's `exit 1` becomes terminal.
+
+    Pin: watchdog must use indefinite respawn -- no `exit 1` in the
+    failure-path branch, and the backoff schedule must be the same
+    regardless of install_complete.done presence. Failure visibility
+    stays with Invoke-WinpodxStep / Write-WinpodxFailure."""
+    text = WATCHDOG.read_text(encoding="utf-8")
+    # The respawn loop must not exit on consecutive failures.
+    assert "respawn_budget_exhausted" not in text, (
+        "watchdog regressed to 3-cycle hard-exit. See smoke-test "
+        "regression 2026-05-10: any Phase 2 failure leaves user permanently "
+        "agentless until reboot."
+    )
+    assert "agent_watchdog_exhausted" not in text
+    # Backoff schedule explicit values -- 30s, 60s, 120s, 240s, 300s cap.
+    assert "$script:BackoffSecs = @(30, 60, 120, 240, 300)" in text
+
+
+def test_watchdog_log_target_branches_on_install_complete() -> None:
+    """Security review #6 (preserved): events should still land in
+    install.log while install.bat is in flight, and switch to
+    watchdog.log after install_complete.done lands so long-lived
+    sessions don't grow install.log unboundedly."""
     text = WATCHDOG.read_text(encoding="utf-8")
     assert "install_complete.done" in text
     assert "Test-SteadyState" in text
-    # Backoff schedule explicit values -- 30s, 60s, 120s, 240s, 300s cap.
-    assert "$script:SteadyBackoffSecs = @(30, 60, 120, 240, 300)" in text
-
-
-def test_watchdog_writes_steady_state_to_separate_log() -> None:
-    """Security review #6: steady-state events go to watchdog.log,
-    NOT install.log -- avoids unbounded growth of the install-time
-    structured stream during long-lived sessions."""
-    text = WATCHDOG.read_text(encoding="utf-8")
     assert "$script:WatchdogLog = 'C:\\winpodx\\install-state\\watchdog.log'" in text
-    # The mode-aware logger picks WatchdogLog when steady, install.log
-    # otherwise. Pin the conditional shape.
     assert "if (Test-SteadyState)" in text

@@ -6,27 +6,30 @@
 # entry covers (a) cold-boot autostart and (b) respawn-on-crash without
 # needing a separate agent.ps1 entry in HKCU\Run.
 #
-# Two operating modes, branched on the install_complete marker:
+# The watchdog's only job is keeping agent.ps1 alive. It uses a fixed
+# exponential backoff schedule (30s, 60s, 120s, 240s, 300s; last value
+# stays in effect indefinitely) and NEVER exits permanently. The
+# previous design had a 3-cycle hard-exit branch in install mode, on
+# the theory that install-resume's logon trigger would re-launch the
+# watchdog on the next user logon. In practice the user is still
+# logged in from the autologon session when install.bat exits, so the
+# logon trigger never fires and the watchdog's exit leaves the guest
+# permanently agentless until the user reboots the VM. (Smoke test
+# 2026-05-10 reproduced this on three separate runs: any Phase 2 bug
+# that prevents install_complete.done from being written cascades into
+# permanent agent death.)
 #
-#   INSTALL MODE (no install_complete.done present):
-#     * 30s poll, 2s/5s debounce.
-#     * Respawn after confirmed death; 60s grace for /health.
-#     * 3 consecutive failed cycles -> Write-WinpodxFailure + exit 1
-#       (signals install-resume the install can't proceed).
-#     * Log target: install.log (the canonical install-time stream).
+# Failure visibility is the responsibility of Invoke-WinpodxStep in
+# install-step-functions.ps1, which calls Write-WinpodxFailure when
+# the per-step retry counter hits MaxRetries. The watchdog does not
+# duplicate that signal.
 #
-#   STEADY-STATE MODE (install_complete.done present):
-#     * 30s poll, 2s/5s debounce -- same as install mode.
-#     * Indefinite respawn with exponential backoff: 30s, 60s, 120s,
-#       240s, 300s (cap at 5 min). Counter never resets to 3-fail
-#       hard-exit -- after install completes, a transient flap should
-#       NOT leave the user agentless until reboot. (security review #6)
-#     * Log target: watchdog.log only (NOT install.log -- avoids
-#       indefinite log growth during long-lived sessions).
-#
-# Mode is re-evaluated on every loop iteration: an install that
-# completes mid-watchdog-life transitions cleanly to steady-state on
-# the next poll without restarting the watchdog.
+# The only branch that remains is the LOG TARGET: while install.bat
+# is in flight (no install_complete.done) the watchdog appends to the
+# canonical install.log so its events sit in the same stream as the
+# step bodies. After install_complete.done lands, it switches to a
+# separate watchdog.log to avoid unbounded growth on long-lived
+# sessions. (security review #6)
 #
 # This script depends on install-state-helpers.ps1 having been staged
 # alongside it (install.bat copies both to C:\winpodx\agent\). If the
@@ -45,16 +48,17 @@ $script:StateDir    = 'C:\winpodx\install-state'
 $script:CompleteMarker = 'C:\winpodx\install-state\install_complete.done'
 $script:WatchdogLog = 'C:\winpodx\install-state\watchdog.log'
 
-# Install-mode timings (unchanged).
+# Polling + debounce + respawn-grace: shared across the whole life of
+# the watchdog. The respawn budget no longer hard-exits -- see the
+# header comment.
 $script:PollSec       = 30
 $script:DebounceSecs  = @(2, 5)
 $script:RespawnGrace  = 60
-$script:MaxRespawns   = 3
 
-# Steady-state backoff schedule. Each entry is the wait between the
-# end of one respawn cycle and the start of the next. Last value
-# stays in effect indefinitely (no exit, no reset).
-$script:SteadyBackoffSecs = @(30, 60, 120, 240, 300)
+# Backoff schedule between respawn cycles. Each entry is the wait
+# between the end of one respawn cycle and the start of the next.
+# Last value stays in effect indefinitely.
+$script:BackoffSecs = @(30, 60, 120, 240, 300)
 
 # Try to load the shared helpers. The watchdog is launched from
 # HKCU\Run *after* install.bat has run Phase 1, so the helpers should
@@ -195,7 +199,7 @@ if (-not (Test-Health)) {
 }
 
 $consecutiveFailures = 0
-$steadyCycleIdx = 0
+$backoffIdx = 0
 $lastState = 'unknown'
 
 while ($true) {
@@ -207,7 +211,7 @@ while ($true) {
             $lastState = 'up'
         }
         $consecutiveFailures = 0
-        $steadyCycleIdx = 0
+        $backoffIdx = 0
         continue
     }
 
@@ -234,7 +238,7 @@ while ($true) {
             steady = $steady
         }
         $consecutiveFailures = 0
-        $steadyCycleIdx = 0
+        $backoffIdx = 0
         $lastState = 'up'
         continue
     }
@@ -244,38 +248,17 @@ while ($true) {
         steady = $steady
     }
 
-    if (-not $steady) {
-        # INSTALL MODE: hard-exit after MaxRespawns to surface the
-        # failure into install_failure.json so install-resume can act.
-        if ($consecutiveFailures -ge $script:MaxRespawns) {
-            Log-Event 'ERROR' 'respawn_budget_exhausted' @{ max = $script:MaxRespawns }
-            if ($script:HelpersLoaded) {
-                try {
-                    Write-WinpodxFailure `
-                        -Step 'agent_ready' -Phase 1 `
-                        -Attempt $consecutiveFailures -MaxAttempts $script:MaxRespawns `
-                        -ExitCode 1 `
-                        -ErrorClass 'agent_watchdog_exhausted' `
-                        -ErrorSummary "watchdog exhausted $($script:MaxRespawns) respawn cycles"
-                } catch {
-                    Write-Bare 'ERROR' 'failure_record_write_failed' $_.Exception.Message
-                }
-            }
-            exit 1
-        }
-        # Below the install-mode budget -- loop continues with PollSec.
-        continue
-    }
-
-    # STEADY-STATE MODE: indefinite respawn with exponential backoff.
-    # Never exits. Counter never resets to a hard-fail. A transient
-    # agent flap post-install must NOT leave the user agentless.
-    $idx = [Math]::Min($steadyCycleIdx, $script:SteadyBackoffSecs.Length - 1)
-    $waitSecs = $script:SteadyBackoffSecs[$idx]
-    Log-Event 'WARN' 'steady_backoff' @{
+    # Indefinite respawn with exponential backoff. The watchdog never
+    # exits -- failure visibility is Invoke-WinpodxStep's job (it
+    # writes install_failure.json on retry exhaustion). Watchdog's
+    # only job is keeping agent.ps1 alive.
+    $idx = [Math]::Min($backoffIdx, $script:BackoffSecs.Length - 1)
+    $waitSecs = $script:BackoffSecs[$idx]
+    Log-Event 'WARN' 'respawn_backoff' @{
         cycle      = $consecutiveFailures
         wait_secs  = $waitSecs
+        steady     = $steady
     }
     Start-Sleep -Seconds $waitSecs
-    $steadyCycleIdx += 1
+    $backoffIdx += 1
 }
