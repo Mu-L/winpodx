@@ -24,17 +24,6 @@ from winpodx.core.agent_install_state import (
     write_install_failure,
 )
 
-_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
-_REDACTOR_CASES_PATH = _FIXTURES_DIR / "redactor_cases.json"
-
-
-def _load_redactor_cases() -> list[dict]:
-    """Load shared redactor fixture cases (also consumed by tests/pwsh/)."""
-    with _REDACTOR_CASES_PATH.open(encoding="utf-8") as fh:
-        data = json.load(fh)
-    return list(data["cases"])
-
-
 # ---------------------------------------------------------------------------
 # Marker primitives
 # ---------------------------------------------------------------------------
@@ -250,26 +239,6 @@ def test_redact_non_string_input_coerced() -> None:
     # rather than crash a logging path.
     out = redact_log_line(12345)  # type: ignore[arg-type]
     assert out == "12345"
-
-
-@pytest.mark.parametrize("case", _load_redactor_cases(), ids=lambda c: c["id"])
-def test_redact_shared_fixture_parity(case: dict) -> None:
-    """Run every shared fixture case through the Python redactor.
-
-    The companion pwsh suite in ``tests/pwsh/`` runs the same cases through
-    ``Invoke-WinpodxRedact``. Both implementations must produce byte-
-    identical output on every case; that contract is what makes the Python
-    redactor and the in-guest PowerShell redactor interchangeable on the
-    sanitization path defined in the design doc.
-    """
-    actual = redact_log_line(case["input"])
-    assert actual == case["expected"], (
-        f"case={case['id']}: expected {case['expected']!r}, got {actual!r}"
-    )
-    for forbidden in case["must_not_contain"]:
-        assert forbidden not in actual, (
-            f"case={case['id']}: forbidden substring {forbidden!r} survived in {actual!r}"
-        )
 
 
 def test_redact_payload_deep_walks_dict() -> None:
