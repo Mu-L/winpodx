@@ -9,6 +9,10 @@
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-05-11
+
+Reverse-open (#48) end-to-end 완성. Linux 앱이 Windows guest 우클릭 "Open with…" 메뉴에 기본으로 노출 — opt-in flag, Settings 토글 불필요. Phase 2 시리즈 완료 (a / b / c / d). v0.4.4 의 Phase 1 foundations 도 carry-over.
+
 ### 추가
 - **Reverse-open Phase 2c — guest 측 핸들러 + sync transport + default-on.** #48 의 end-to-end 루프 완성: 사용자 opt-in 없이 Linux 앱이 Windows guest 의 우클릭 "Open with…" 메뉴에 등장. `cfg.reverse_open.enabled` 기본값 **True**. 3개 guest 측 스크립트 (`config/oem/reverse-open/register-apps.ps1`, `unregister-apps.ps1`, `shim/winpodx-reverse-open-shim.ps1`) + 새 host 측 push 모듈 (`src/winpodx/reverse_open/sync.py`). shim 은 apps manifest + ICO 와 함께 sync payload 에 base64 임베드되어 — 이 PR 이전에 만들어진 기존 pod 에서도 작동 (dockur 의 OEM 번들 스테이징에 의존하지 않음). sync transport 는 기존 bearer-auth `/exec` endpoint 위에서 180초 budget 으로 동작, 성공 시 `cfg.reverse_open.last_synced_at` 영속. `winpodx pod start` 가 host 측 listener daemon 을 자동 spawn (idempotent — 이미 돌면 no-op), `winpodx pod stop` 이 pod 중지 전에 teardown. `winpodx host-open refresh` 가 agent 도달 가능하면 guest 로 push 하고 `pushed N app(s) + M icon(s) → registered` 보고. PowerShell shim 은 `\\tsclient\home\.local\share\winpodx\reverse-open\incoming\` 에 atomic `<uuid>.json.tmp` 쓰고 `<uuid>.json` 으로 rename — host listener 가 부분적 request 를 절대 픽업 안 함. guest 측 레지스트리 shape: 앱별 `HKCU\Software\Classes\winpodx-<slug>` ProgID + `shell\open\command` 의 shim 호출, 그리고 앱의 MIME 타입이 매핑되는 모든 확장자에 대한 `HKCU\Software\Classes\<ext>\OpenWithProgids\winpodx-<slug>` (built-in curated 테이블이 top ~25 명확 매핑 커버, 나머지는 타입 문자열에서 per-MIME 추정). +13 tests (`test_reverse_open_sync.py`). reverse-open Phase 2 시리즈 완료, 남은 follow-up 은 shim 의 Go 포팅 (PowerShell 의 ~300-500 ms cold-start 보다 빠름; 추적 중이지만 차단 아님). References #48.
 

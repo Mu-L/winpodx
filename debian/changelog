@@ -1,3 +1,33 @@
+winpodx (0.4.5) unstable; urgency=medium
+
+  * Reverse-open feature (#48) ships end-to-end. Linux apps now
+    appear in the Windows guest's right-click "Open with..." menu by
+    default — no opt-in flag, no Settings toggle required. Phase 2
+    series complete (a discovery + ICO + CLI, b listener daemon +
+    lifecycle, c guest handlers + sync transport + default-on, d Qt
+    Settings card).
+  * `winpodx pod start` auto-spawns the host-side reverse-open
+    listener daemon; `winpodx pod stop` tears it down before stopping
+    the pod itself.
+  * `winpodx host-open refresh` scans `$XDG_DATA_HOME/applications`
+    + `$XDG_DATA_DIRS`, applies allow / denylist, rasterises icons to
+    multi-resolution ICO, stages a manifest under
+    `~/.local/share/winpodx/reverse-open/`, and pushes everything to
+    the guest via the bearer-authed `/exec` endpoint when the agent
+    is reachable.
+  * On the guest, per-app `HKCU\\Software\\Classes\\winpodx-<slug>`
+    ProgIDs are attached to each applicable extension's
+    `OpenWithProgids` subkey; clicking a Linux app from "Open
+    with..." invokes a PowerShell shim that atomically writes a
+    request JSON into the host listener's incoming dir.
+  * Self-contained sync — all three guest scripts
+    (`register-apps.ps1`, `unregister-apps.ps1`, the shim) are
+    base64-embedded into the sync payload, so existing pods get the
+    feature on first sync without depending on dockur having staged
+    the OEM bundle.
+
+ -- Kim DaeHyun <kernalix7@kodenet.io>  Mon, 11 May 2026 13:00:00 +0000
+
 winpodx (0.4.4) unstable; urgency=medium
 
   * Patch release. Restores real-time `pod wait-ready --logs` output that
