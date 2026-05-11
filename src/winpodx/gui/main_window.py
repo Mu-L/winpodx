@@ -982,6 +982,22 @@ class WinpodxWindow(QMainWindow):
 
         layout.addLayout(cols)
 
+        # Reverse-open (#48) \u2014 Linux apps in the Windows guest's right-
+        # click "Open with\u2026" menu. The panel is self-contained \u2014 its
+        # button handlers call into the host_open CLI handlers
+        # directly, and the enable / allow / deny edits land on
+        # ``self.cfg.reverse_open`` so the existing _save_settings()
+        # persists them via the shared cfg.save() call.
+        from winpodx.gui.reverse_open_panel import build_panel as _build_ropanel
+
+        try:
+            ropanel = _build_ropanel(self.cfg, parent=content)
+            layout.addWidget(ropanel)
+        except Exception:  # noqa: BLE001 \u2014 never block Settings rendering
+            logging.getLogger(__name__).exception(
+                "reverse-open panel failed to build; Settings page continues without it"
+            )
+
         # Budget warning \u2014 only visible when max_sessions over-subscribes ram_gb.
         # Live-updates as the user types in either field.
         self.budget_warning_label = QLabel("")
