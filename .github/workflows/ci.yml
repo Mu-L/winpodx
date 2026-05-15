@@ -19,6 +19,11 @@ jobs:
       - run: pip install ruff
       - run: ruff check src/ tests/
       - run: ruff format --check src/ tests/
+      - name: Verify version stamps agree across files
+        # Catches the v0.5.2 release-prep mistake (debian/changelog stayed at
+        # 0.5.1 while pyproject.toml / __init__.py moved to 0.5.2) before the
+        # tag push. See scripts/ci/verify_versions.py for details.
+        run: python scripts/ci/verify_versions.py
 
   test:
     runs-on: ${{ matrix.runner }}

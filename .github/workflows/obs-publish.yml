@@ -48,6 +48,25 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y curl jq
 
       - name: Trigger OBS service run (token)
+        # On tag push: OBS hasn't seen the new tag yet — `runservice` makes
+        # it re-fetch the source, generate a fresh tarball, and start a full
+        # rebuild across every (repo, arch) combination (~30-60 min on
+        # shared OBS infrastructure). That's the only path that produces
+        # RPMs for a fresh tag.
+        #
+        # On workflow_dispatch: we're re-running the workflow against a tag
+        # OBS has already built (e.g. to repopulate Release assets after a
+        # workflow-side fix). Triggering another full rebuild here is pure
+        # waste — the wait-loop downstream would sit through the entire
+        # rebuild even though the RPMs we'd end up downloading would be
+        # byte-identical. Skip the trigger so the wait-loop immediately
+        # observes the existing terminal state.
+        #
+        # If a re-dispatch genuinely does need a fresh rebuild (e.g. OBS
+        # has cached a broken build), set the OBS_FORCE_REBUILD environment
+        # at workflow level or click "Re-run all jobs" — the push-event
+        # branch above handles that flow already.
+        if: github.event_name == 'push'
         env:
           OBS_TOKEN: ${{ secrets.OBS_TOKEN }}
         run: |
@@ -58,6 +77,12 @@ jobs:
           curl -sS -f -X POST \
             -H "Authorization: Token $OBS_TOKEN" \
             "$OBS_API/trigger/runservice?project=$OBS_PROJECT&package=$OBS_PACKAGE"
+
+      - name: Skip OBS service trigger (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "workflow_dispatch — assuming OBS already has ${{ steps.tag.outputs.tag }} built."
+          echo "If you need a forced rebuild, push a new tag or click 'Re-run all jobs' on the original tag-push run."
 
       - name: Wait for OBS build to finish
         run: |
