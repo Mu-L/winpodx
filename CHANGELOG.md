@@ -30,34 +30,22 @@ verbatim.
 
 ## [0.5.4] - 2026-05-19
 
-Same-day hotfix: the v0.5.3 Debian/Ubuntu package build broke on Ubuntu 24.04 because the older `hatchling` shipped there rejects the `Programming Language :: Python :: 3.14` Trove classifier (its known-classifier whitelist predates the 3.14 stable release). The classifier is removed; the CI matrix still tests Python 3.14 functionally. No code change.
+User-report follow-up release. Fixes slow-link compose timeout (#212), eliminates the silent "launched but no window" failure mode that #213 / #214 surfaced, lands Ubuntu 26.04 packaging in the CI matrix (#206), Windows language / region / keyboard configurability (#201), and the dynamic desktop resolution feature (#197).
+
+> **Note:** v0.5.3 was tagged earlier the same day but its `.deb` build failed on Debian/Ubuntu hosts due to a Trove-classifier whitelist mismatch in older `hatchling`. v0.5.4 supersedes it with the same feature set plus a packaging fix; the v0.5.3 release page was removed to avoid two releases on the same day. The v0.5.3 tag stays for history.
 
 ### Highlights
 
-**Hotfix release.** `.deb` build on Ubuntu 24.04 failed in v0.5.3 because of an unknown-classifier rejection in `hatchling`. The `Programming Language :: Python :: 3.14` Trove classifier line is dropped; CI matrix still tests 3.14.
+**Pull-friendly compose timeout, visible FreeRDP launch errors, Ubuntu 26.04 in CI, and a packaging fix that makes the `.deb` build green on every supported distro.**
 
-- v0.5.3 Debian/Ubuntu package build is now green again — RPM / OBS / AUR / GitHub Release were unaffected and stay on v0.5.3 contents.
-- Everything else from v0.5.3 (compose timeout #212, FreeRDP launch error surfacing #213 / #214, Ubuntu 26.04 packaging #206, Windows language config #201, dynamic desktop resolution #197) is carried forward.
-
-### Fixed
-
-- **Debian/Ubuntu package build fails with `Unknown classifier: Programming Language :: Python :: 3.14`.** Older `hatchling` (Ubuntu 24.04 ships 1.18.0) maintains its own Trove-classifier whitelist and rejects classifiers added after its release. v0.5.3's pyproject.toml claim of 3.14 was cosmetic — actual Python 3.14 coverage comes from the CI matrix, not the classifier list. The line is dropped; functional 3.14 testing is unchanged.
-
-## [0.5.3] - 2026-05-19
-
-User-report follow-up release. Fixes slow-link compose timeout (#212), eliminates the silent "launched but no window" failure mode that #213 / #214 surfaced, lands Ubuntu 26.04 packaging + Python 3.14 in the CI matrix (#206), Windows language / region / keyboard configurability (#201), and the dynamic desktop resolution feature (#197).
-
-### Highlights
-
-**Pull-friendly compose timeout, visible FreeRDP launch errors, Ubuntu 26.04 + Python 3.14 in CI.** First-time Windows image pulls on slow internet no longer trip the 120s wall; silent FreeRDP failures now print the stderr log path; the untested-platform gap that produced #213 / #214 is closed.
-
-- `podman-compose up -d` / `down` default timeout 120s → 1800s; honors `WINPODX_COMPOSE_TIMEOUT_SECS` (`0` = no cap). Fixes #212.
-- `launch_app` polls FreeRDP 500 ms after spawn and raises `FreeRDP exited immediately with rc=...` with the stderr log path. Fixes #213 / #214.
-- Ubuntu 26.04 packaging + Python 3.14 in the CI matrix. Closes the untested-platform gap behind #213 / #214 (#206).
-- Windows `[pod] language / region / keyboard` keys; same YAML-injection hardening as `user` / `password` / `home` (#201).
-- Desktop sessions now resize dynamically to the FreeRDP client window size (#197).
-- LICENSE / README ship to `/usr/share/winpodx/` in the `.deb`; GUI License tab works again on Debian/Ubuntu (#201).
-- Qt stylesheet parser warnings at GUI startup silenced (#203).
+- `podman-compose up -d` / `down` default timeout 120s → 1800s; honors `WINPODX_COMPOSE_TIMEOUT_SECS` (`0` = no cap). Fixes #212 reported by @jimed-rand.
+- `launch_app` polls FreeRDP 500 ms after spawn and raises `FreeRDP exited immediately with rc=...` with the stderr log path. Fixes #213 reported by @mozjacksson + #214 reported by @ismikes.
+- Ubuntu 26.04 packaging + Python 3.14 in the CI matrix. Closes the untested-platform gap behind #213 / #214 (by @juampe, #206).
+- Windows `[pod] language / region / keyboard` keys; same YAML-injection hardening as `user` / `password` / `home` (by @juampe, #201).
+- Desktop sessions now resize dynamically to the FreeRDP client window size (by @Zeik0s, #197).
+- LICENSE / README ship to `/usr/share/winpodx/` in the `.deb`; GUI License tab works again on Debian/Ubuntu (by @juampe, #201).
+- Qt stylesheet parser warnings at GUI startup silenced (by @juampe, #203).
+- **Packaging fix:** minor-version Python Trove classifiers (`:: 3.9` … `:: 3.13`) dropped from `pyproject.toml`. Older `hatchling` (Debian 12 ships 1.12.0, Ubuntu 24.04 ships 1.18.0) bundles its own classifier whitelist and rejects any minor-version classifier added after that release; that's what broke the v0.5.3 `.deb` build. Replaced with the version-agnostic `:: 3 :: Only`. Supported-version coverage still comes from `requires-python = ">=3.9"` and the CI matrix.
 
 ### Added
 
@@ -65,7 +53,7 @@ User-report follow-up release. Fixes slow-link compose timeout (#212), eliminate
 
 ### Changed
 
-- CI matrix now tests Python 3.14 and packages for Ubuntu 26.04 (#206). Closes the untested-platform gap that surfaced in #213 / #214.
+- CI matrix now tests Python 3.14 and packages for Ubuntu 26.04 (#206). Closes the untested-platform gap that surfaced in #213 / #214. (by @juampe)
 
 ### Fixed
 
@@ -75,9 +63,11 @@ User-report follow-up release. Fixes slow-link compose timeout (#212), eliminate
 
 - **Qt stylesheet parser warnings at GUI startup.** `main_window.py` combined a bare property declaration (`background: ...`) with full QSS selector rules (`QPushButton { ... }`), which Qt's stylesheet engine rejects. The central widget now carries an `objectName="centralRoot"` and the background rule is scoped to `QWidget#centralRoot { ... }`. No visual change; just silences the `Could not parse stylesheet of object QWidget(...)` warnings in the logs. Library page Launch/Edit buttons also got their inline QSS converted to multi-line blocks for readability while tracking parser warnings. (by @juampe, #203)
 
-- **Dynamic Desktop Window Resolution** - creating a desktop session now resizes the resolution dynamically to the size of the FreeRDP client window. Flag added as default behavior for desktop sessions. Covered by tests. (by @Zeik0s, #197)
+- **Dynamic Desktop Window Resolution** — creating a desktop session now resizes the resolution dynamically to the size of the FreeRDP client window. Flag added as default behavior for desktop sessions. Covered by tests. (by @Zeik0s, #197)
 
 - **Launch surfaces FreeRDP stderr on quick-exit; eliminates silent "launched but no window" failure mode.** Helps diagnose Plasma 6 / Wayland and Python 3.14 edge cases. Fixes #213 reported by @mozjacksson + #214 reported by @ismikes.
+
+- **Debian/Ubuntu `.deb` build fails with `Unknown classifier: Programming Language :: Python :: 3.X`.** Older `hatchling` shipped by Debian/Ubuntu maintains its own Trove-classifier whitelist and rejects fine-grained Python version classifiers added after that hatchling release. The minor-version classifiers were cosmetic — actual Python version coverage comes from `requires-python` and the CI matrix. Removed in favour of `Programming Language :: Python :: 3 :: Only`, which every hatchling release accepts.
 
 ## [0.5.2] - 2026-05-14
 
