@@ -169,6 +169,10 @@ Example:
   on Ubuntu 24.04+ / Debian 13 where `qemu-kvm` became a virtual
   package with no install candidate. Same probe pattern as the
   freerdp2 → freerdp3 selector. (reported by @n-osennij, #200)
+- Tray UX overhaul: auto-spawned from GUI / CLI, bundled SVG so the
+  indicator actually renders, Open Dashboard menu, Quit confirms +
+  stops pod, install.sh marker suppresses spurious recovery
+  notifications during Sysprep.
 ```
 
 The "no AI tool co-author trailers" rule above is unrelated: it bans

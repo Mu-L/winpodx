@@ -90,6 +90,16 @@ Launch with `winpodx gui`. The Qt6 main window has five pages:
 
 The system tray (`winpodx tray`) is a lighter-weight alternative — pod controls, app launcher submenu (top 20 + Full Desktop), maintenance submenu (Clean Locks / Sync Time / Suspend), and an optional idle-monitor thread.
 
+### Tray auto-spawn + UNRESPONSIVE recovery (v0.5.5)
+
+Since v0.5.5 the tray spawns itself automatically from the GUI window and from every CLI subcommand that touches the pod (everything except `setup` / `gui` / `tray`), so a user who only ever runs `winpodx app run` still gets the system-tray indicator + the UNRESPONSIVE auto-recovery driver. A flock under `$XDG_RUNTIME_DIR/winpodx/tray.lock` prevents stacked instances when the user manually re-launches the tray.
+
+The tray context menu now starts with **Open Dashboard** (one-click to the main GUI window). **Quit** confirms via a dialog and on confirmation runs `stop_pod` + `pkill -f 'winpodx gui'` + `app.quit` so a stray click can't cycle the pod's ~30 s restart.
+
+To launch the tray at every login, open the GUI → Settings → tick **"Launch winpodx tray at login (system tray icon + idle-stall auto-recovery)"**. The toggle writes / removes `~/.config/autostart/winpodx-tray.desktop` via the XDG autostart spec; portable across KDE / GNOME / XFCE / Cinnamon. The file is the source of truth — you can also drop it by hand to opt out without launching the GUI. Toggle applies immediately; no Save Settings click needed.
+
+The tray watches the pod state every 30 s. On a `RUNNING → UNRESPONSIVE` transition (container alive long enough that an RDP-port miss can't be confused with a fresh boot) it fires a desktop notification and spawns a background worker that asks the agent to cycle Windows `TermService`. On recovery a "Pod recovered" notification fires; on failure a "needs manual restart" notification points at `winpodx pod restart`. While `install.sh` is running its `[3/4]` / `[4/4]` Sysprep + OEM-reboot phases, the marker file `~/.config/winpodx/.install_in_progress` suppresses the recovery path so genuine install-time RDP gaps don't fire spurious notifications.
+
 ## Health checks
 
 `winpodx check` runs every probe used by the GUI Health card and prints a one-line verdict for each:

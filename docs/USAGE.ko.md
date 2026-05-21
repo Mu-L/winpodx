@@ -90,6 +90,16 @@ winpodx config import             # 기존 winapps.conf import
 
 시스템 트레이 (`winpodx tray`) 는 가벼운 대안 — pod 컨트롤, 앱 런처 서브메뉴 (상위 20 + Full Desktop), 유지보수 서브메뉴 (Clean Locks / Sync Time / Suspend), 선택적 idle-monitor 스레드.
 
+### Tray 자동 spawn + UNRESPONSIVE 자동 회복 (v0.5.5)
+
+v0.5.5 부터 tray 가 GUI 창과 pod 를 건드리는 모든 CLI 서브커맨드 (`setup` / `gui` / `tray` 제외) 에서 자동 spawn — `winpodx app run` 만 쓰는 사용자도 시스템 트레이 아이콘 + UNRESPONSIVE 자동 회복 드라이버 활용 가능. `$XDG_RUNTIME_DIR/winpodx/tray.lock` flock 으로 중복 인스턴스 차단.
+
+트레이 컨텍스트 메뉴 최상단에 **Open Dashboard** (메인 GUI 창 원클릭). **Quit** 가 다이얼로그로 확인 후 `stop_pod` + `pkill -f 'winpodx gui'` + `app.quit` 실행 — 실수 클릭으로 pod ~30초 재시작 비용 발생 방지.
+
+매 로그인 시 tray 자동 실행하려면 GUI → Settings → **"Launch winpodx tray at login (system tray icon + idle-stall auto-recovery)"** 체크. 토글이 XDG autostart 스펙 통해 `~/.config/autostart/winpodx-tray.desktop` 작성/삭제; KDE / GNOME / XFCE / Cinnamon 모두 portable. 파일이 source of truth — GUI 안 띄우고 손으로 떼서 opt out 가능. 토글 즉시 적용, Save Settings 클릭 불필요.
+
+tray 가 pod 상태 30초 주기로 감시. `RUNNING → UNRESPONSIVE` 전이 시 (컨테이너가 fresh boot 와 헷갈릴 수 없을 만큼 오래 살아있는데 RDP 포트 miss) 데스크톱 알림 발사 + 백그라운드 worker 가 agent 에게 Windows `TermService` cycle 요청. 회복 시 "Pod recovered" 알림; 실패 시 "needs manual restart" 알림이 `winpodx pod restart` 안내. `install.sh` 의 `[3/4]` / `[4/4]` Sysprep + OEM 재부팅 단계 진행 중에는 marker 파일 `~/.config/winpodx/.install_in_progress` 가 회복 경로 억제 — install 단계의 정당한 RDP 공백에 spurious 알림 발사 안 함.
+
 ## 헬스 체크
 
 `winpodx check` 가 GUI Health 카드가 쓰는 모든 프로브를 실행하고 각각 한 줄 결과 출력:
