@@ -31,7 +31,9 @@ import argparse
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Optional
 
 from winpodx.core.i18n import tr
 
@@ -42,6 +44,13 @@ class Finding:
     title: str
     detail: str = ""
     suggestion: str = ""
+    # Optional auto-remediation for `winpodx doctor --fix`. A callable that
+    # performs the fix and returns a one-line result string. Only invoked for
+    # warn / fail findings. None => the finding has no safe automatic fix
+    # (e.g. "binary present but config missing" needs an interactive setup).
+    # Excluded from --json output (callables aren't serialisable; the JSON
+    # payload only carries severity / title / detail / suggestion).
+    fix: Optional[Callable[[], str]] = None
 
     def severity_tag(self) -> str:
         return {"ok": "[OK]  ", "warn": "[WARN]", "fail": "[FAIL]"}.get(self.severity, "[?]   ")
@@ -56,12 +65,18 @@ def handle_doctor(args: argparse.Namespace) -> None:
              suggestion) instead of the human-readable report.
     --quick  Skip slow probes (container health / guest exec) and run only
              the cheap local checks: freerdp, kvm, backend-on-PATH,
-             config-state, pending-setup, autostart, initialized-flag.
-             Useful for quick pre-flight checks where a 10-second timeout
-             on ``podman ps`` would be disruptive.
+             config-state, desktop-entries, pending-setup, autostart,
+             initialized-flag. Useful for quick pre-flight checks where a
+             10-second timeout on ``podman ps`` would be disruptive.
+    --fix    After reporting, auto-remediate every warn / fail finding that
+             carries a safe, idempotent fix (re-register stale desktop
+             entries, remove a dangling autostart entry, resume a pending
+             install). Findings without a registered fix are reported but
+             left alone. Re-run ``winpodx doctor`` afterwards to verify.
     """
     emit_json: bool = getattr(args, "json", False)
     quick: bool = getattr(args, "quick", False)
+    do_fix: bool = getattr(args, "fix", False)
 
     findings: list[Finding] = []
 
@@ -71,6 +86,7 @@ def handle_doctor(args: argparse.Namespace) -> None:
     findings.append(_check_kvm())
     findings.extend(_check_container_backend())
     findings.append(_check_config_state())
+    findings.append(_check_desktop_entries())
     findings.append(_check_pending_setup())
     findings.append(_check_autostart_entry())
     findings.append(_check_initialized_flag())
@@ -119,6 +135,13 @@ def handle_doctor(args: argparse.Namespace) -> None:
             print(tr("        Suggested: {suggestion}").format(suggestion=f.suggestion))
 
     print()
+
+    # --- auto-fix: run BEFORE the summary exit so fixes always execute even
+    # when there's a FAIL finding (which otherwise exits 1). ---
+    if do_fix:
+        _run_fixes(findings)
+        print()
+
     if fail_count:
         print(
             tr("Summary: {fail_count} FAIL, {warn_count} WARN").format(
@@ -134,6 +157,27 @@ def handle_doctor(args: argparse.Namespace) -> None:
         )
     else:
         print(tr("Summary: all checks passed."))
+
+
+def _run_fixes(findings: list[Finding]) -> None:
+    """Run the registered fix for every warn / fail finding that has one.
+
+    Each fix is best-effort + idempotent: an exception is caught and reported
+    rather than aborting the remaining fixes. Findings without a `.fix` (or
+    with severity "ok") are skipped silently.
+    """
+    fixable = [f for f in findings if f is not None and f.fix is not None and f.severity != "ok"]
+    if not fixable:
+        print(tr("--fix: nothing to remediate (no auto-fixable warnings/failures)."))
+        return
+    print(tr("--fix: remediating {n} finding(s)...").format(n=len(fixable)))
+    for f in fixable:
+        try:
+            result = f.fix()  # type: ignore[misc]
+            print(tr("  ✓ {title}: {result}").format(title=f.title, result=result))
+        except Exception as e:  # noqa: BLE001 — a failed fix must not abort the rest
+            print(tr("  ✗ {title}: fix failed ({error})").format(title=f.title, error=e))
+    print(tr("Re-run `winpodx doctor` to verify."))
 
 
 # -----------------------------------------------------------------------
@@ -348,8 +392,35 @@ def _check_pending_setup() -> Finding:
         f"pending setup steps detected ({len(steps)} item(s))",
         detail=", ".join(steps) if steps else "(marker present but empty)",
         suggestion=(
-            "Run any `winpodx <cmd>` to auto-resume, or `winpodx pod wait-ready` to retry manually."
+            "Run `winpodx doctor --fix` to resume now, or any `winpodx <cmd>` to auto-resume."
         ),
+        fix=_fix_pending_setup,
+    )
+
+
+def _check_desktop_entries() -> Finding:
+    """Discovered apps with no `.desktop` entry on disk — a common state after
+    an interrupted refresh or a desktop-cache wipe. The apps are known
+    (persisted under the data dir) but never landed in the DE menu."""
+    try:
+        from winpodx.core.app import list_available_apps
+        from winpodx.utils.paths import applications_dir
+    except Exception as e:  # noqa: BLE001
+        return Finding("warn", "could not enumerate apps", detail=str(e))
+
+    apps = list_available_apps()
+    if not apps:
+        return Finding("ok", "no discovered apps yet (nothing to register)")
+    appdir = applications_dir()
+    missing = [a.name for a in apps if not (appdir / f"winpodx-{a.name}.desktop").exists()]
+    if not missing:
+        return Finding("ok", f"all {len(apps)} discovered app(s) have desktop entries")
+    return Finding(
+        "warn",
+        f"{len(missing)} discovered app(s) missing desktop entries",
+        detail=", ".join(missing[:8]) + (" ..." if len(missing) > 8 else ""),
+        suggestion="Run `winpodx doctor --fix` (or `winpodx app refresh`) to re-register them.",
+        fix=_fix_desktop_entries,
     )
 
 
@@ -367,7 +438,8 @@ def _check_autostart_entry() -> Finding:
             "fail",
             "autostart entry references a missing winpodx binary",
             detail=str(autostart),
-            suggestion="Run `winpodx uninstall` to clean up the autostart entry.",
+            suggestion="Run `winpodx doctor --fix` to remove the dangling autostart entry.",
+            fix=_fix_autostart_entry,
         )
     return Finding("ok", "autostart entry present and binary resolves")
 
@@ -388,3 +460,43 @@ def _check_initialized_flag() -> Finding:
         "cfg.pod.initialized = false (first-run prompt will fire on next CLI/GUI launch)",
         suggestion="Run `winpodx setup` to silence the prompt and provision the guest.",
     )
+
+
+# -----------------------------------------------------------------------
+# Fix actions for `winpodx doctor --fix`. Each is idempotent + best-effort
+# and returns a one-line result string. Host-side fixes are self-contained;
+# the pending-setup fix delegates to the existing resume path (which is
+# real-Windows smoke-gated, but this only *triggers* it -- no new guest code).
+# -----------------------------------------------------------------------
+
+
+def _fix_autostart_entry() -> str:
+    """Remove a dangling tray autostart entry (binary no longer on PATH)."""
+    from winpodx.desktop.autostart import disable_tray_autostart
+
+    removed = disable_tray_autostart()
+    return "removed dangling autostart entry" if removed else "no autostart entry to remove"
+
+
+def _fix_desktop_entries() -> str:
+    """Re-register `.desktop` entries from the already-persisted app list.
+
+    Uses the persisted apps (no guest round-trip) so the fix works even when
+    the pod is down. `_register_desktop_entries` both installs missing entries
+    and prunes stale ones, so it converges the menu to the persisted set.
+    """
+    from winpodx.cli.app import _register_desktop_entries
+    from winpodx.core.app import list_available_apps
+
+    apps = list_available_apps()
+    _register_desktop_entries(apps)
+    return f"re-registered desktop entries for {len(apps)} app(s)"
+
+
+def _fix_pending_setup() -> str:
+    """Resume a half-finished install (delegates to the unified resume path)."""
+    from winpodx.utils import pending
+
+    lines: list[str] = []
+    pending.resume(printer=lines.append)
+    return "resumed pending install steps" + (f" ({len(lines)} line(s))" if lines else "")

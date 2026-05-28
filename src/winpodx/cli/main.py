@@ -529,8 +529,18 @@ def cli(argv: list[str] | None = None) -> None:
         help=(
             "Skip the slow probes (container health / guest exec) and run "
             "only the cheap local checks: freerdp, kvm, backend-on-PATH, "
-            "config-state, pending-setup, autostart, initialized-flag. "
-            "Completes in < 1 s on most hosts."
+            "config-state, desktop-entries, pending-setup, autostart, "
+            "initialized-flag. Completes in < 1 s on most hosts."
+        ),
+    )
+    doctor_p.add_argument(
+        "--fix",
+        action="store_true",
+        help=(
+            "Auto-remediate warn/fail findings that carry a safe, idempotent "
+            "fix: re-register stale desktop entries, remove a dangling "
+            "autostart entry, resume a pending install. Findings without a "
+            "registered fix are reported but left alone."
         ),
     )
 
