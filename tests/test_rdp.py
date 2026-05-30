@@ -100,17 +100,26 @@ def _patch_freerdp_probes(monkeypatch, *, native, flatpak):
     )
 
 
-def test_find_freerdp_auto_prefers_native_when_both_present(monkeypatch):
-    # Native is RAIL-proven; the Flatpak sandbox has RAIL / multi-display / DPI
-    # rough edges, so auto prefers native when both are installed.
+def test_find_freerdp_auto_prefers_flatpak_when_both_present(monkeypatch):
+    # The Flatpak ships a self-contained FreeRDP 3+ (no host package skew) and
+    # its RAIL multi-display rough edges are handled by cfg.rdp.multimon=span,
+    # so auto prefers the Flatpak when both are installed.
     from winpodx.core.rdp import find_freerdp
 
     _patch_freerdp_probes(monkeypatch, native=True, flatpak=True)
+    assert find_freerdp("auto") == ("flatpak run com.freerdp.FreeRDP", "flatpak")
+
+
+def test_find_freerdp_auto_falls_back_to_native(monkeypatch):
+    # No Flatpak -> the native client is the fallback under auto.
+    from winpodx.core.rdp import find_freerdp
+
+    _patch_freerdp_probes(monkeypatch, native=True, flatpak=False)
     assert find_freerdp("auto") == ("/usr/bin/xfreerdp3", "xfreerdp")
 
 
-def test_find_freerdp_auto_falls_back_to_flatpak(monkeypatch):
-    # No native client -> the Flatpak is the fallback.
+def test_find_freerdp_auto_uses_flatpak_when_only_flatpak(monkeypatch):
+    # Only the Flatpak present -> auto uses it.
     from winpodx.core.rdp import find_freerdp
 
     _patch_freerdp_probes(monkeypatch, native=False, flatpak=True)
@@ -380,6 +389,47 @@ class TestBuildRdpCommand:
         )
         assert any(c.startswith("/app:") for c in cmd)
         assert "/dynamic-resolution" not in cmd
+
+    def test_span_added_to_app_launch_by_default(self, cfg, monkeypatch):
+        # multimon defaults to "span": a RAIL app launch sizes the session
+        # desktop to the host monitor bounding box so a window dragged to a
+        # second monitor keeps input mapping (clicks would otherwise miss).
+        monkeypatch.setattr(
+            "winpodx.core.rdp.find_freerdp",
+            lambda *a, **k: ("/usr/bin/xfreerdp3", "xfreerdp"),
+        )
+        cmd, _ = build_rdp_command(cfg, app_executable="notepad.exe")
+        assert "/span" in cmd
+        assert "/multimon" not in cmd
+
+    def test_span_not_in_full_desktop_launch(self, cfg, monkeypatch):
+        # The full-desktop path keeps /dynamic-resolution and must not span.
+        monkeypatch.setattr(
+            "winpodx.core.rdp.find_freerdp",
+            lambda *a, **k: ("/usr/bin/xfreerdp3", "xfreerdp"),
+        )
+        cmd, _ = build_rdp_command(cfg)
+        assert "/span" not in cmd
+
+    def test_multimon_off_omits_span(self, cfg, monkeypatch):
+        monkeypatch.setattr(
+            "winpodx.core.rdp.find_freerdp",
+            lambda *a, **k: ("/usr/bin/xfreerdp3", "xfreerdp"),
+        )
+        cfg.rdp.multimon = "off"
+        cmd, _ = build_rdp_command(cfg, app_executable="notepad.exe")
+        assert "/span" not in cmd
+        assert "/multimon" not in cmd
+
+    def test_multimon_explicit_uses_multimon_flag(self, cfg, monkeypatch):
+        monkeypatch.setattr(
+            "winpodx.core.rdp.find_freerdp",
+            lambda *a, **k: ("/usr/bin/xfreerdp3", "xfreerdp"),
+        )
+        cfg.rdp.multimon = "multimon"
+        cmd, _ = build_rdp_command(cfg, app_executable="notepad.exe")
+        assert "/multimon" in cmd
+        assert "/span" not in cmd
 
     def test_dpi_flag_omitted_when_zero(self, cfg, monkeypatch):
         monkeypatch.setattr(

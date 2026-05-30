@@ -287,15 +287,15 @@ def find_freerdp(prefer: str = "auto") -> tuple[str, str] | None:
     """Locate a FreeRDP 3+ client, honouring a source preference.
 
     ``prefer``:
-      * ``"auto"`` (default) — **prefer the native ``xfreerdp``**, fall back to
-        the Flatpak only when no native client is present. Native is the
-        RAIL-proven client; the Flatpak (`com.freerdp.FreeRDP`) runs in a
-        sandbox that has shown RAIL / multi-display / DPI-scaling rough edges,
-        so it's a fallback, not the default.
-      * ``"native"`` — same native-first order (explicit).
+      * ``"auto"`` (default) — **prefer the Flatpak ``com.freerdp.FreeRDP``**,
+        fall back to the native ``xfreerdp`` only when the Flatpak is absent.
+        The Flatpak ships a self-contained FreeRDP 3+ (no host package skew);
+        its earlier RAIL multi-display rough edges are handled by
+        ``cfg.rdp.multimon = "span"`` (see ``build_rdp_command``).
+      * ``"native"`` — force the native client first, Flatpak only as fallback
+        (for hosts where the Flatpak sandbox is a problem).
       * ``"flatpak"`` — force the Flatpak (fall back to native only if the
-        Flatpak isn't installed) — for hosts whose native ``freerdp3-x11`` is
-        broken (e.g. Ubuntu 26.04, #393); set via ``cfg.rdp.freerdp_source``.
+        Flatpak isn't installed); set via ``cfg.rdp.freerdp_source``.
 
     Override per install via ``cfg.rdp.freerdp_source``. Returns ``(path_or_cmd,
     kind)`` or ``None``. Success is cached per-preference; a miss is not cached
@@ -306,12 +306,16 @@ def find_freerdp(prefer: str = "auto") -> tuple[str, str] | None:
     if cached is not None:
         return cached
 
-    if pref == "flatpak":
-        # Forced Flatpak: try it first, fall back to native if not installed.
-        found = _find_flatpak_freerdp() or _find_native_freerdp()
-    else:
-        # auto + native: native first (RAIL-proven), Flatpak only as fallback.
+    if pref == "native":
+        # Forced native: try it first, fall back to the Flatpak if absent.
         found = _find_native_freerdp() or _find_flatpak_freerdp()
+    else:
+        # auto + flatpak: prefer the Flatpak client (self-contained FreeRDP 3+,
+        # no host package skew), native only as fallback. The RAIL multi-display
+        # rough edges that previously made native the safer default are handled
+        # by cfg.rdp.multimon = "span" (see build_rdp_command), so the Flatpak
+        # is viable as the preferred client again.
+        found = _find_flatpak_freerdp() or _find_native_freerdp()
 
     if found is not None:
         _FREERDP_CACHE[pref] = found
@@ -395,6 +399,22 @@ def build_rdp_command(
     # If an App launches, remove default dynamic-resolution flag
     if (app_executable or launch_uri) and "/dynamic-resolution" in cmd:
         cmd.remove("/dynamic-resolution")
+
+    # Multi-monitor RAIL: without a desktop big enough to cover every host
+    # monitor, a RAIL window dragged onto a second monitor lands at coords
+    # outside the (single-monitor) session desktop, so input/repaint desync
+    # and clicks miss. "/span" sizes the session desktop to the bounding box
+    # of all host monitors -- one wide rectangle, NO per-monitor
+    # MonitorDefArray (which rdprrap can't handle, so "/multimon" kills input
+    # entirely). Scoped to RAIL app launches; the full-desktop path keeps
+    # /dynamic-resolution instead. cfg.rdp.multimon "off" disables it for
+    # non-rectangular layouts.
+    if app_executable or launch_uri:
+        _multimon = getattr(cfg.rdp, "multimon", "span")
+        if _multimon == "span":
+            cmd.append("/span")
+        elif _multimon == "multimon":
+            cmd.append("/multimon")
 
     # Share a directory as \\tsclient\media so the guest's USB desktop
     # shortcut always resolves: the real removable-media base when mounted,

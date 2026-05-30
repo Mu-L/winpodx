@@ -11,7 +11,8 @@
 
 ### Added
 
-- **`--extra-args` / `cfg.rdp.extra_flags` 가 이제 멀티모니터 + 리페인트 knob 을 허용합니다** (`/multimon`, `/multimon:force`, `/span`, `/gdi:sw|hw`, `/smart-sizing[:WxH]`, `/monitors:0,1`), 각각 값 검증됨. 일부 멀티디스플레이 환경의 RAIL 창-이동 깨짐(해상도/DPI 다른 모니터 사이로 창을 끌면 뭉개지거나 깨짐) 해결 레버 — 예: `winpodx app run <app> --extra-args="/multimon"` 는 전체 호스트 모니터 레이아웃을 세션에 광고해 창이 게스트가 아는 geometry 안에 머물게 함. 지금은 override 전용; 최적 조합 확정되면 기본값으로 넣을 수 있음.
+- **멀티모니터 RAIL 이 이제 기본으로 동작합니다 — RemoteApp 창을 두 번째 모니터로 끌어도 입력이 계속 먹힙니다 (`cfg.rdp.multimon`, 기본값 `span`).** 이게 없으면 RAIL 앱 실행이 세션 데스크탑을 모니터 1개 크기로 잡아서, 두 번째 모니터로 끈 창이 그 데스크탑 *밖*의 호스트 가상스크린 좌표에 놓임 — 클릭이 빗나가다가 아예 안 먹힘. 이제 winpodx 가 RAIL 앱 실행에 `/span` 을 추가해 세션 데스크탑을 전체 호스트 모니터의 bounding box(모니터별 `MonitorDefArray` 없는 하나의 넓은 직사각형)로 잡습니다. `/multimon` 을 먼저 시도했지만 전체 모니터 레이아웃을 전송해서 게스트의 `rdprrap` RAIL 헬퍼가 처리 못 하고 입력을 완전히 죽임 — 그래서 기본값은 `multimon` 이 아니라 `span`. 스팬된 bounding box 에 빈 공간이 생기는 비직사각형 배치에선 `cfg.rdp.multimon = "off"`(또는 `winpodx setup --multimon off`) 설정; `multimon` 은 진단 전용 값으로 남겨둠.
+- **`--extra-args` / `cfg.rdp.extra_flags` 가 이제 멀티모니터 + 리페인트 knob 을 허용합니다** (`/multimon`, `/multimon:force`, `/span`, `/gdi:sw|hw`, `/smart-sizing[:WxH]`, `/monitors:0,1`), 각각 값 검증됨. 일부 멀티디스플레이 환경의 RAIL 창-이동 깨짐(해상도/DPI 다른 모니터 사이로 창을 끌면 뭉개지거나 깨짐) 의 수동 레버. 이제 `cfg.rdp.multimon` 이 기본 `span`(위 항목)이라 입력 손실 케이스는 기본으로 처리됨; 이 플래그들은 리페인트 / 스케일링 knob 의 실행별 실험용으로 남음.
 
 ### Fixed
 
@@ -23,7 +24,7 @@
 
 - **`install.sh` 가 시스템을 건드리기 전에 설치 플랜을 출력합니다.** 모드(R/A/C/N) 와 모든 의존성 소스가 결정되면, 인스톨러가 **주요 컴포넌트를 균등하게** 나열한 짧은 플랜 — `python3`, `venv` 프로브, 컨테이너 백엔드, FreeRDP, `/dev/kvm`, GUI — 을 각각 감지 상태 + 이번 실행의 동작(기존 사용 / 설치 / 호스트 요구사항)과 함께, 그리고 배포판 패키지 매니저로 설치할 정확한 패키지 목록 + Windows VM 프로비저닝 단계까지 — *어떤 패키지 설치/`sudo` 전에* 보여줍니다. 모드 프롬프트에서 바로 설치로 직행하지 않고 진행 내용이 투명합니다.
 
-- **FreeRDP 클라이언트 소스를 선택 가능하게 했고, 런처는 네이티브 클라이언트를 우선하며 Flatpak 은 fallback / opt-in 입니다 (#269, #366, #393).** 기존엔 `install.sh` 가 Flatpak `com.freerdp.FreeRDP` 이 이미 있어도 네이티브 `freerdp3` 패키지를 항상 설치했습니다(중복 — #269). 이제: (1) **런처가 네이티브 `xfreerdp` 우선** (`core/rdp.find_freerdp` auto 순서가 native-first) — RAIL 검증된 클라이언트; Flatpak 샌드박스는 RAIL / 멀티디스플레이 / DPI 스케일링 문제가 있어서 네이티브가 없거나 명시 선택했을 때만 사용. (2) **`install.sh` 가 중복 클라이언트를 설치하지 않음** — FreeRDP(네이티브든 Flatpak 이든) 가 하나라도 있으면 아무것도 안 깖(있는 Flatpak 은 fallback 으로 재사용); 둘 다 없으면 `auto` 는 **네이티브** 패키지 설치. (3) **Custom 설치 모드에서 주요 의존성마다 소스를 선택** — 컨테이너 백엔드(podman/docker/libvirt), **FreeRDP 클라이언트(auto / native / flatpak)**, GUI — 그리고 `winpodx setup --freerdp-source <auto|native|flatpak>` 가 선택을 `cfg.rdp.freerdp_source` 에 저장(네이티브 `freerdp3-x11` 이 깨진 호스트, 예: Ubuntu 26.04 #393, 에서 `flatpak` 설정).
+- **FreeRDP 클라이언트 소스를 선택 가능하게 했고, 런처는 Flatpak 클라이언트를 우선하며 네이티브는 fallback / opt-in 입니다 (#269, #366, #393).** 기존엔 `install.sh` 가 Flatpak `com.freerdp.FreeRDP` 이 이미 있어도 네이티브 `freerdp3` 패키지를 항상 설치했습니다(중복 — #269). 이제: (1) **런처가 Flatpak `com.freerdp.FreeRDP` 우선** (`core/rdp.find_freerdp` auto 순서가 flatpak-first) — 호스트 패키지 편차 없는 자체완결 FreeRDP 3+. 이전의 RAIL 멀티디스플레이 문제(RemoteApp 창을 두 번째 모니터로 끌면 입력 손실)는 이제 `cfg.rdp.multimon = "span"` 으로 처리되므로 Flatpak 이 우선 클라이언트로 viable; 네이티브 `xfreerdp` 는 Flatpak 이 없거나 `--freerdp-source native` 로 명시 고정했을 때 fallback. (2) **`install.sh` 가 중복 클라이언트를 설치하지 않음** — FreeRDP(네이티브든 Flatpak 이든) 가 하나라도 있으면 아무것도 안 깖; 둘 다 없으면 `auto` 는 **네이티브** 패키지 설치(경량, Flatpak 런타임 안 받음), 런처 auto 순서는 실제로 Flatpak 이 있을 때만 그걸 우선. (3) **Custom 설치 모드에서 주요 의존성마다 소스를 선택** — 컨테이너 백엔드(podman/docker/libvirt), **FreeRDP 클라이언트(auto / native / flatpak)**, GUI — 그리고 `winpodx setup --freerdp-source <auto|native|flatpak>` 가 선택을 `cfg.rdp.freerdp_source` 에 저장(Flatpak 샌드박스가 문제인 호스트에선 `native` 로 네이티브 고정).
 
 ### Fixed
 
