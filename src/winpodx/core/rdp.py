@@ -306,12 +306,14 @@ def find_freerdp(prefer: str = "auto") -> tuple[str, str] | None:
     if cached is not None:
         return cached
 
-    if pref == "flatpak":
-        # Forced Flatpak: try it first, fall back to native if not installed.
-        found = _find_flatpak_freerdp() or _find_native_freerdp()
-    else:
-        # auto + native: native first (RAIL-proven), Flatpak only as fallback.
+    if pref == "native":
+        # Forced native: try it first, fall back to the Flatpak if absent.
         found = _find_native_freerdp() or _find_flatpak_freerdp()
+    else:
+        # EXPERIMENT (experiment/freerdp-flatpak-first): auto + flatpak prefer
+        # the Flatpak client first, native fallback. Kept as a branch to A/B
+        # against native-first (= main).
+        found = _find_flatpak_freerdp() or _find_native_freerdp()
 
     if found is not None:
         _FREERDP_CACHE[pref] = found
