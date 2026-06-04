@@ -161,44 +161,6 @@ GLOBAL_STYLE = f"""
     }}
 """
 
-# Top Navigation Bar
-TOP_BAR = f"""
-    QWidget#topBar {{
-        background: {C.BASE};
-        border-top: 1px solid rgba(255, 255, 255, 0.04);
-        border-bottom: 1px solid {C.SURFACE1};
-        min-height: 56px;
-        max-height: 56px;
-    }}
-"""
-
-TAB_BTN = f"""
-    QPushButton {{
-        color: {C.OVERLAY1};
-        background: transparent;
-        border: none;
-        border-bottom: 2px solid transparent;
-        padding: 15px 16px 14px 16px;
-        font-size: 13px;
-        font-weight: 500;
-    }}
-    QPushButton:hover {{
-        color: {C.SUBTEXT1};
-        background: {rgba(C.SURFACE1, 0.42)};
-        border-bottom: 2px solid {C.SURFACE2};
-    }}
-    QPushButton:focus {{
-        color: {C.TEXT};
-        background: {rgba(C.SURFACE1, 0.34)};
-    }}
-    QPushButton:checked {{
-        color: {C.BLUE};
-        border-bottom: 2px solid {C.BLUE};
-        background: {rgba(C.BLUE, 0.10)};
-        font-weight: 600;
-    }}
-"""
-
 POD_CHIP = f"""
     QFrame#podChip {{
         background: {C.SURFACE0};
@@ -485,21 +447,6 @@ VIEW_TOGGLE = f"""
     QPushButton:checked {{
         color: {C.BLUE};
         background: {C.SURFACE1};
-    }}
-"""
-
-# App Card (grid view).
-APP_CARD = f"""
-    QFrame#appCard {{
-        background: {rgba(C.SURFACE0, 0.72)};
-        border: {CARD_BORDER};
-        border-top: 1px solid rgba(255, 255, 255, 0.045);
-        border-radius: {RADIUS_XXL}px;
-    }}
-    QFrame#appCard:hover {{
-        background: {rgba(C.SURFACE1, 0.54)};
-        border: {CARD_BORDER_HOVER};
-        border-top: 1px solid rgba(255, 255, 255, 0.075);
     }}
 """
 

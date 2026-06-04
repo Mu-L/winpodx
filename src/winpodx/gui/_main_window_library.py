@@ -140,8 +140,8 @@ class LibraryPageMixin:
         self.search_box.setPlaceholderText(tr("Search apps by name..."))
         self.search_box.setStyleSheet(SEARCH_BAR)
         self.search_box.setMinimumHeight(46)
-        self.search_box.setMinimumWidth(420)
-        self.search_box.setMaximumWidth(720)
+        self.search_box.setMinimumWidth(360)
+        self.search_box.setMaximumWidth(600)
         self.search_box.addAction(
             load_icon("search", C.SUBTEXT0, 18),
             QLineEdit.ActionPosition.LeadingPosition,
@@ -498,12 +498,14 @@ class LibraryPageMixin:
         """Quick actions the hero command bar can run (label, icon, handler).
         Reuses existing tr() labels + handlers from sibling mixins."""
         return [
-            (tr("Settings"), "gear", lambda: self._switch_page(1)),
-            (tr("Tools"), "clean", lambda: self._switch_page(2)),
-            (tr("Terminal / Logs"), "prompt", lambda: self._switch_page(3)),
-            (tr("Info"), "pending", lambda: self._switch_page(4)),
-            (tr("Devices"), "hardware", lambda: self._switch_page(5)),
-            (tr("License"), "diamond", lambda: self._switch_page(6)),
+            # Page indices match the QStackedWidget order in main_window._build_ui
+            # (Dashboard=0, All apps=1, then these). Keep in sync with the nav.
+            (tr("Settings"), "gear", lambda: self._switch_page(2)),
+            (tr("Tools"), "clean", lambda: self._switch_page(3)),
+            (tr("Terminal / Logs"), "prompt", lambda: self._switch_page(4)),
+            (tr("Info"), "pending", lambda: self._switch_page(5)),
+            (tr("Devices"), "hardware", lambda: self._switch_page(6)),
+            (tr("License"), "diamond", lambda: self._switch_page(7)),
             (tr("Suspend Pod"), "pause", self._on_suspend),
             (tr("Resume Pod"), "play", self._on_resume),
             (tr("Full Desktop"), "desktop", self._on_open_desktop),
@@ -638,9 +640,18 @@ class LibraryPageMixin:
         panel.setMinimumHeight(220)
         return panel
 
+    def _grid_cols(self) -> int:
+        """Column count for the tile grid, derived from the available width so
+        tiles never force a horizontal scrollbar on narrow / scaled windows."""
+        pages = getattr(self, "pages", None)
+        width = pages.width() if pages is not None else 1100
+        content = max(320, width - 80)  # page horizontal margins
+        return max(3, min(6, content // 128))  # ~128px per tile
+
     def _populate_grid(self, apps: list[AppInfo]) -> None:
         """Grid view - Start-menu-style icon tiles (dense)."""
-        cols = 6
+        cols = self._grid_cols()
+        self._current_grid_cols = cols
         self.app_list_layout.setSpacing(SPACE_L)
         grid = QGridLayout()
         grid.setHorizontalSpacing(SPACE_S)
@@ -664,6 +675,17 @@ class LibraryPageMixin:
         grid_widget.setLayout(grid)
         self.app_list_layout.addWidget(grid_widget)
         self.app_list_layout.addStretch()
+
+    def _reflow_library(self) -> None:
+        """Re-flow the tile grid when the responsive column count changes on
+        resize (avoids a horizontal scrollbar on narrow windows). No-op in
+        list view or when the count is unchanged. Driven by the resizeEvent."""
+        if getattr(self, "_view_mode", "grid") != "grid":
+            return
+        if not hasattr(self, "search_box"):
+            return
+        if self._grid_cols() != getattr(self, "_current_grid_cols", None):
+            self._filter_apps(self.search_box.text())
 
     def _populate_list(self, apps: list[AppInfo]) -> None:
         """List view - horizontal tiles."""

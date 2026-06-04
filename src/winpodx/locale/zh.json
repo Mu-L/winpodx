@@ -823,10 +823,8 @@
   "Terminate Session": "终止会话",
   "(no active sessions)": "（无活动会话）",
   "Terminate: {name}": "终止：{name}",
-  "Home / Apps": "主页 / 应用",
   "Apps": "应用",
   "Terminal / Logs": "终端 / 日志",
-  "Navigation": "导航",
   "Pinned": "已固定",
   "Recent": "最近",
   "All apps": "所有应用",
@@ -864,5 +862,6 @@
   "Protected — monitoring active": "受保护 — 监控已启用",
   "Checking pod health…": "正在检查 Pod 健康状况…",
   "Pod is stopped": "Pod 已停止",
-  "Status unknown": "状态未知"
+  "Status unknown": "状态未知",
+  "Devices": "设备"
 }

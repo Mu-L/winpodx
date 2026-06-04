@@ -226,6 +226,10 @@ class WinpodxWindow(
             self._reflow_settings()
         if hasattr(self, "_reflow_devices"):
             self._reflow_devices()
+        if hasattr(self, "_reflow_dashboard"):
+            self._reflow_dashboard()
+        if hasattr(self, "_reflow_library"):
+            self._reflow_library()
 
 
 def run_gui() -> None:

@@ -823,10 +823,8 @@
   "Terminate Session": "セッションを終了",
   "(no active sessions)": "（アクティブなセッションなし）",
   "Terminate: {name}": "終了: {name}",
-  "Home / Apps": "ホーム / アプリ",
   "Apps": "アプリ",
   "Terminal / Logs": "ターミナル / ログ",
-  "Navigation": "ナビゲーション",
   "Pinned": "ピン留め",
   "Recent": "最近",
   "All apps": "すべてのアプリ",
@@ -864,5 +862,6 @@
   "Protected — monitoring active": "保護中 — 監視が有効",
   "Checking pod health…": "ポッドの状態を確認中…",
   "Pod is stopped": "ポッドは停止しています",
-  "Status unknown": "状態不明"
+  "Status unknown": "状態不明",
+  "Devices": "デバイス"
 }

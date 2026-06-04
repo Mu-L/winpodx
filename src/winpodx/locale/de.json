@@ -823,10 +823,8 @@
   "Terminate Session": "Sitzung beenden",
   "(no active sessions)": "(keine aktiven Sitzungen)",
   "Terminate: {name}": "Beenden: {name}",
-  "Home / Apps": "Start / Apps",
   "Apps": "Apps",
   "Terminal / Logs": "Terminal / Protokolle",
-  "Navigation": "Navigation",
   "Pinned": "Angeheftet",
   "Recent": "Zuletzt",
   "All apps": "Alle Apps",
@@ -864,5 +862,6 @@
   "Protected — monitoring active": "Geschützt – Überwachung aktiv",
   "Checking pod health…": "Pod-Zustand wird geprüft…",
   "Pod is stopped": "Pod ist gestoppt",
-  "Status unknown": "Status unbekannt"
+  "Status unknown": "Status unbekannt",
+  "Devices": "Geräte"
 }

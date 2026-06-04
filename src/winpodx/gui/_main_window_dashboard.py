@@ -22,6 +22,7 @@ import threading
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QCheckBox,
     QFrame,
     QHBoxLayout,
@@ -106,9 +107,12 @@ class DashboardMixin:
         body.setContentsMargins(0, 0, SPACE_XXL, 0)
         body.setSpacing(SPACE_L)
 
-        # Row 1: resource centre (wide) + auto-recovery (narrow).
-        row1 = QHBoxLayout()
+        # Row 1: resource centre (wide) + auto-recovery (narrow). Stacks
+        # vertically on narrow windows (see _reflow_dashboard) so the three
+        # gauges never cramp under the 2:1 split at the minimum width.
+        row1 = QBoxLayout(QBoxLayout.Direction.LeftToRight)
         row1.setSpacing(SPACE_L)
+        self._dashboard_row1 = row1
         row1.addWidget(self._build_resource_card(), 2)
         row1.addWidget(self._build_recovery_card(), 1)
         body.addLayout(row1)
@@ -131,7 +135,24 @@ class DashboardMixin:
 
         self._populate_workspace()
         self._refresh_dashboard()
+        self._reflow_dashboard()
         return page
+
+    def _reflow_dashboard(self) -> None:
+        """Stack the resource + auto-recovery cards vertically when the page is
+        too narrow for the 2:1 row (the three gauges cramp otherwise). Driven
+        by the window resizeEvent; idempotent."""
+        row1 = getattr(self, "_dashboard_row1", None)
+        pages = getattr(self, "pages", None)
+        if row1 is None or pages is None:
+            return
+        want = (
+            QBoxLayout.Direction.TopToBottom
+            if pages.width() < 900
+            else QBoxLayout.Direction.LeftToRight
+        )
+        if row1.direction() != want:
+            row1.setDirection(want)
 
     # -- card scaffolding ------------------------------------------------- #
 

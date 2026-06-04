@@ -1,22 +1,21 @@
 # SPDX-License-Identifier: MIT
-"""Header-chrome builder mixin for ``WinpodxWindow``.
+"""Sidebar + header-chrome builder mixin for ``WinpodxWindow``.
 
-Holds the methods that build the persistent top-of-window chrome:
-the top launcher bar (logo + pod chip + start/stop buttons + menu),
-the warning banner shown while the pod is not running, and the slim
-info bar (status text + backend + resource summary). Pulled out of
-``main_window.py`` to keep that file focused on overall window
-orchestration.
+Holds the methods that build the persistent chrome: the left navigation
+sidebar (logo + one checkable row per page), the slim top strip (pod chip
++ start/stop buttons), the warning banner shown while the pod is not
+running, and the slim info bar. Pulled out of ``main_window.py`` to keep
+that file focused on overall window orchestration.
 
 Host-class contract (only listed for readers; not enforced):
     cfg: winpodx.core.config.Config
     apps: list[AppInfo]
     _switch_page(idx) -> None       — defined on the host class.
     _on_start_pod() / _on_stop_pod()  — defined on PodStatusMixin.
-    Widgets created here (nav_buttons, nav_menu_actions, pod_dot,
-    pod_label, agent_dot, rdp_dot, btn_start, btn_stop, banner_icon,
-    banner_text, banner_btn, info_label, info_pod_dot, info_pod_addr)
-    are accessed from sibling mixins via the shared ``self`` instance.
+    Widgets created here (nav_buttons, pod_dot, pod_label, agent_dot,
+    rdp_dot, btn_start, btn_stop, banner_icon, banner_text, banner_btn,
+    info_label, info_pod_dot, info_pod_addr) are accessed from sibling
+    mixins via the shared ``self`` instance.
 """
 
 from __future__ import annotations
@@ -116,10 +115,9 @@ class HeaderMixin:
         layout.addSpacing(SPACE_M)
 
         # Vertical nav: one checkable row per page, active row highlighted.
-        # The buttons ARE laid out here (unlike the old hidden overflow menu),
-        # so there is no un-parented QPushButton to ghost at (0,0).
+        # Buttons are laid out here, so they render in the sidebar (never as
+        # an un-parented stray widget). _switch_page / shortcuts drive these.
         self.nav_buttons: list[QPushButton] = []
-        self.nav_menu_actions = []  # back-compat; the sidebar drives nav now
         nav_items = [
             (tr("Dashboard"), 0, "home"),
             (tr("All apps"), 1, "grid"),

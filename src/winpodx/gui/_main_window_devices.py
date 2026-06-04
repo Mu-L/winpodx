@@ -157,7 +157,7 @@ class DevicesMixin:
         # Width the cards get is the stacked-pages width (window minus sidebar).
         want = (
             QBoxLayout.Direction.TopToBottom
-            if pages.width() < 900
+            if pages.width() < 840
             else QBoxLayout.Direction.LeftToRight
         )
         if cols.direction() != want:
