@@ -58,7 +58,7 @@ class HeaderMixin:
     def _build_sidebar(self) -> QWidget:
         bar = QFrame()
         bar.setObjectName("sideBar")
-        bar.setFixedWidth(220)
+        bar.setFixedWidth(200)
         bar.setStyleSheet(SIDEBAR)
 
         layout = QVBoxLayout(bar)

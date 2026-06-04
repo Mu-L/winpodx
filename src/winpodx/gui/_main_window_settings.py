@@ -24,6 +24,7 @@ import threading
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
+    QBoxLayout,
     QComboBox,
     QFrame,
     QGridLayout,
@@ -223,8 +224,12 @@ class SettingsPageMixin:
             )
         )
 
-        cols = QHBoxLayout()
+        # Two cards side by side on wide windows; _reflow_settings() stacks
+        # them vertically when the page gets too narrow, so the Hardware card
+        # never clips off the right edge on small / scaled displays.
+        cols = QBoxLayout(QBoxLayout.Direction.LeftToRight)
         cols.setSpacing(SPACE_L)
+        self._settings_cols = cols
 
         self.input_user = QLineEdit(self.cfg.rdp.user)
         self.input_ip = QLineEdit(self.cfg.rdp.ip)
@@ -747,7 +752,25 @@ class SettingsPageMixin:
         layout.addStretch()
         scroll.setWidget(content)
         outer.addWidget(scroll)
+        self._reflow_settings()
         return page
+
+    def _reflow_settings(self) -> None:
+        """Stack the RDP / Hardware cards vertically when the page is too
+        narrow for them side by side, restore the row when there's room.
+
+        Called on every window resize (host ``resizeEvent``) so the switch is
+        live as the user drags the window smaller/larger. Idempotent.
+        """
+        cols = getattr(self, "_settings_cols", None)
+        if cols is None:
+            return
+        # Width the cards actually get is the stacked-pages width (window
+        # minus the fixed sidebar). Below ~840px the two cards clip, so stack.
+        avail = self.pages.width() if hasattr(self, "pages") else self.width()
+        want = QBoxLayout.Direction.TopToBottom if avail < 840 else QBoxLayout.Direction.LeftToRight
+        if cols.direction() != want:
+            cols.setDirection(want)
 
     def _settings_card_shell(
         self,

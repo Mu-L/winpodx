@@ -80,8 +80,13 @@ class WinpodxWindow(
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("WinPodX")
-        self.setMinimumSize(1000, 640)
-        self.resize(1100, 720)
+        # Lower minimum so the window can fit small / fractionally-scaled
+        # laptop screens once the 200px sidebar is accounted for.
+        self.setMinimumSize(920, 560)
+        # Preferred opening size, clamped to the screen by _fit_to_screen()
+        # after the UI is built (a fixed 1100px window ran off the right edge
+        # on smaller displays, clipping the Save button + Hardware column).
+        self._preferred_size = (1100, 720)
 
         self.cfg = Config.load()
         self.apps = list_available_apps()
@@ -97,6 +102,7 @@ class WinpodxWindow(
 
         self._setup_signals()
         self._build_ui()
+        self._fit_to_screen()
         self._start_status_timer()
 
         # v0.5.1: always-on tails feeding the bottom log bar + Terminal.
@@ -189,6 +195,35 @@ class WinpodxWindow(
         content_col.addWidget(self.pages, 1)
 
         root.addWidget(content, 1)
+
+    def _fit_to_screen(self) -> None:
+        """Open at the preferred size, but never larger than the screen.
+
+        Clamps the window to the available screen area and centers it so the
+        right-hand content (Save button, Hardware column) can't fall off the
+        edge on smaller or fractionally-scaled displays.
+        """
+        pref_w, pref_h = getattr(self, "_preferred_size", (1100, 720))
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            if avail.width() > 0 and avail.height() > 0:
+                w = max(self.minimumWidth(), min(pref_w, avail.width() - 60))
+                h = max(self.minimumHeight(), min(pref_h, avail.height() - 80))
+                self.resize(w, h)
+                self.move(
+                    avail.x() + (avail.width() - w) // 2,
+                    avail.y() + (avail.height() - h) // 2,
+                )
+                return
+        self.resize(pref_w, pref_h)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt signature
+        super().resizeEvent(event)
+        # Keep responsive page layouts (e.g. the Settings two-column form)
+        # in step with the live window width as the user drags it.
+        if hasattr(self, "_reflow_settings"):
+            self._reflow_settings()
 
 
 def run_gui() -> None:

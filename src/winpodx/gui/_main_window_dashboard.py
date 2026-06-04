@@ -83,7 +83,11 @@ class DashboardMixin:
     def _build_dashboard_page(self) -> QWidget:
         page = QWidget()
         outer = QVBoxLayout(page)
-        outer.setContentsMargins(SPACE_XXL, 0, SPACE_XXL, SPACE_XL)
+        # No right margin on the outer layout: the scroll area runs to the
+        # window edge so its scrollbar sits at the far right. The card column
+        # gets its right gap from the inner body margin instead, so the
+        # scrollbar never overlaps a card's rounded corner.
+        outer.setContentsMargins(SPACE_XXL, 0, 0, SPACE_XL)
         outer.setSpacing(SPACE_M)
         outer.addWidget(
             make_page_header(
@@ -99,7 +103,7 @@ class DashboardMixin:
 
         inner = QWidget()
         body = QVBoxLayout(inner)
-        body.setContentsMargins(0, 0, 0, 0)
+        body.setContentsMargins(0, 0, SPACE_XXL, 0)
         body.setSpacing(SPACE_L)
 
         # Row 1: resource centre (wide) + auto-recovery (narrow).
