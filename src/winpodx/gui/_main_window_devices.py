@@ -151,10 +151,15 @@ class DevicesMixin:
         for them side by side; restore the row when there's room. Called from
         the window resizeEvent so it tracks live resizing. Idempotent."""
         cols = getattr(self, "_devices_cols", None)
-        if cols is None:
+        pages = getattr(self, "pages", None)
+        if cols is None or pages is None:
             return
-        avail = self.pages.width() if hasattr(self, "pages") else self.width()
-        want = QBoxLayout.Direction.TopToBottom if avail < 900 else QBoxLayout.Direction.LeftToRight
+        # Width the cards get is the stacked-pages width (window minus sidebar).
+        want = (
+            QBoxLayout.Direction.TopToBottom
+            if pages.width() < 900
+            else QBoxLayout.Direction.LeftToRight
+        )
         if cols.direction() != want:
             cols.setDirection(want)
 

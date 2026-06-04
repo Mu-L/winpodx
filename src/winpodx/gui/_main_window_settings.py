@@ -763,12 +763,16 @@ class SettingsPageMixin:
         live as the user drags the window smaller/larger. Idempotent.
         """
         cols = getattr(self, "_settings_cols", None)
-        if cols is None:
+        pages = getattr(self, "pages", None)
+        if cols is None or pages is None:
             return
         # Width the cards actually get is the stacked-pages width (window
         # minus the fixed sidebar). Below ~840px the two cards clip, so stack.
-        avail = self.pages.width() if hasattr(self, "pages") else self.width()
-        want = QBoxLayout.Direction.TopToBottom if avail < 840 else QBoxLayout.Direction.LeftToRight
+        want = (
+            QBoxLayout.Direction.TopToBottom
+            if pages.width() < 840
+            else QBoxLayout.Direction.LeftToRight
+        )
         if cols.direction() != want:
             cols.setDirection(want)
 
