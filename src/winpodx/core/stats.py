@@ -222,10 +222,12 @@ def _guest_disk(cfg: Config) -> tuple[float | None, float | None, float | None]:
     try:
         from winpodx.core.disk import get_guest_disk_usage
 
-        # Short timeout: this spawns PowerShell in the guest, so a non-
-        # interactive guest (login screen) must fail fast, not hang the
-        # dashboard for the 30 s default.
-        usage = get_guest_disk_usage(cfg, timeout=6)
+        # agent_only: a passive dashboard poll must NOT fall back to a FreeRDP
+        # RemoteApp PowerShell (it flashes a visible window in the guest every
+        # run). If the agent isn't reachable (e.g. guest at the login screen),
+        # this returns None and the disk bar just shows its cached/"n/a" value.
+        # Short timeout so it fails fast rather than hanging the dashboard.
+        usage = get_guest_disk_usage(cfg, timeout=6, agent_only=True)
     except Exception as e:  # noqa: BLE001 -- never let a probe break the snapshot
         log.debug("guest disk probe failed: %s", e)
         return None, None, None

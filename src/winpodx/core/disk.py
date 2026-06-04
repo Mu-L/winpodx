@@ -225,25 +225,53 @@ if ($max -gt $c.Size) {
 """.strip()
 
 
-def get_guest_disk_usage(cfg: Config, *, timeout: int = 30) -> DiskUsage | None:
+def get_guest_disk_usage(
+    cfg: Config, *, timeout: int = 30, agent_only: bool = False
+) -> DiskUsage | None:
     """Probe the guest C: volume. Returns None when the guest is unreachable
-    or the output can't be parsed (callers treat None as "skip this round")."""
-    from winpodx.core.windows_exec import WindowsExecError, run_in_windows
+    or the output can't be parsed (callers treat None as "skip this round").
 
-    try:
-        result = run_in_windows(cfg, _USAGE_PS, timeout=timeout, description="disk-usage")
-    except WindowsExecError as e:
-        log.debug("disk-usage probe exec failed: %s", e)
+    Default runs through ``run_via_transport`` (HTTP agent first, FreeRDP
+    RemoteApp fallback). ``agent_only=True`` restricts the probe to the agent
+    and returns None if it isn't reachable — used by the GUI dashboard's
+    passive poll so a background metric never falls back to a FreeRDP RemoteApp
+    PowerShell, which flashes a visible window in the guest on every run.
+    """
+    if agent_only:
+        try:
+            from winpodx.core.transport import dispatch
+
+            transport = dispatch(cfg)
+        except Exception as e:  # noqa: BLE001 — agent optional; degrade to None
+            log.debug("disk-usage agent dispatch failed: %s", e)
+            return None
+        if transport is None or getattr(transport, "name", None) != "agent":
+            return None
+        try:
+            res = transport.exec(_USAGE_PS, timeout=timeout, description="disk-usage")
+        except Exception as e:  # noqa: BLE001 — never flash / never raise here
+            log.debug("disk-usage agent probe failed: %s", e)
+            return None
+        rc, stdout = res.rc, res.stdout
+    else:
+        from winpodx.core.windows_exec import WindowsExecError, run_via_transport
+
+        try:
+            result = run_via_transport(cfg, _USAGE_PS, timeout=timeout, description="disk-usage")
+        except WindowsExecError as e:
+            log.debug("disk-usage probe exec failed: %s", e)
+            return None
+        rc, stdout = result.rc, result.stdout
+
+    if rc != 0:
+        log.debug("disk-usage probe rc=%s", rc)
         return None
-    if not result.ok:
-        log.debug("disk-usage probe rc=%s stderr=%s", result.rc, result.stderr)
-        return None
     try:
-        data = json.loads(result.stdout.strip())
+        data = json.loads(stdout.strip())
         total = int(data["total"])
         free = int(data["free"])
     except (ValueError, KeyError, TypeError) as e:
-        log.debug("disk-usage probe unparseable %r: %s", result.stdout, e)
+        log.debug("disk-usage probe unparseable %r: %s", stdout, e)
         return None
     if total <= 0:
         return None
