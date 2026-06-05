@@ -7,7 +7,7 @@ winpodx (0.6.0) unstable; urgency=medium
     QEMU/KVM-in-a-container backend now covers passthrough too. See the
     CHANGELOG / GitHub release notes for the full list (#286, #300, #460+).
 
- -- Kim DaeHyun <kernalix7@kodenet.io>  Thu, 04 Jun 2026 12:00:00 +0000
+ -- Kim DaeHyun <kernalix7@kodenet.io>  Fri, 05 Jun 2026 12:00:00 +0000
 
 winpodx (0.5.9) unstable; urgency=medium
 
