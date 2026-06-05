@@ -293,3 +293,36 @@ def test_cgroup_dir_for_pid_v1_returns_none(monkeypatch: pytest.MonkeyPatch, tmp
 
     monkeypatch.setattr("builtins.open", fake_open)
     assert stats._cgroup_dir_for_pid(4321) is None
+
+
+def test_cgroup_memory_bytes_prefers_memory_current(tmp_path) -> None:
+    (tmp_path / "memory.current").write_text("123456\n")
+    assert stats._cgroup_memory_bytes(str(tmp_path)) == 123456
+
+
+def test_cgroup_memory_bytes_falls_back_to_rss_sum(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    # No memory.current (memory controller not delegated in rootless) -> sum the
+    # VmRSS of every PID in cgroup.procs (kernel-accounted, controller-agnostic).
+    import io
+
+    (tmp_path / "cgroup.procs").write_text("111\n222\n")
+    status = {
+        111: "Name:\tqemu\nVmRSS:\t  2097152 kB\n",  # 2 GiB (the dockur QEMU)
+        222: "Name:\tconmon\nVmRSS:\t     1024 kB\n",  # 1 MiB
+    }
+    real_open = open
+
+    def fake_open(path, *args, **kwargs):
+        if isinstance(path, str) and path.startswith("/proc/") and path.endswith("/status"):
+            return io.StringIO(status[int(path.split("/")[2])])
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", fake_open)
+    assert stats._cgroup_memory_bytes(str(tmp_path)) == (2097152 + 1024) * 1024
+
+
+def test_cgroup_memory_bytes_none_when_nothing_readable(tmp_path) -> None:
+    # No memory.current and no cgroup.procs -> give up (None).
+    assert stats._cgroup_memory_bytes(str(tmp_path)) is None

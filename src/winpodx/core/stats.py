@@ -292,13 +292,54 @@ def _cgroup_dir_for_pid(pid: int) -> str | None:
     return cgdir if os.path.isdir(cgdir) else None
 
 
+def _cgroup_memory_bytes(cgdir: str) -> int | None:
+    """Bytes of memory used by the container, or ``None``. Never raises.
+
+    Prefers the cgroup's own ``memory.current`` (accurate, present when the
+    memory controller is delegated). Rootless setups frequently delegate only
+    ``cpu``/``pids`` to the user slice — so ``memory.current`` is absent even
+    though ``cpu.stat`` reads fine — in which case fall back to summing the
+    ``VmRSS`` of every process in the cgroup (``cgroup.procs`` is always
+    readable, and per-process RSS is kernel-accounted regardless of which
+    controllers are on). For the dockur backend the QEMU process dominates, so
+    its resident guest RAM is captured.
+    """
+    try:
+        with open(f"{cgdir}/memory.current", encoding="ascii") as fh:
+            return int(fh.read().strip())
+    except (OSError, ValueError):
+        pass  # memory controller not delegated (common rootless) -- sum RSS
+
+    try:
+        with open(f"{cgdir}/cgroup.procs", encoding="ascii") as fh:
+            pids = [int(line) for line in fh if line.strip()]
+    except (OSError, ValueError) as e:
+        log.debug("cgroup.procs read failed: %s", e)
+        return None
+
+    total = 0
+    found = False
+    for pid in pids:
+        try:
+            with open(f"/proc/{pid}/status", encoding="ascii") as fh:
+                for line in fh:
+                    if line.startswith("VmRSS:"):
+                        total += int(line.split()[1]) * 1024  # kB -> bytes
+                        found = True
+                        break
+        except (OSError, ValueError):
+            continue  # process exited mid-scan, or no VmRSS (kernel thread)
+    return total if found else None
+
+
 def _cgroup_cpu_ram(cfg: Config) -> tuple[float | None, float | None, float | None]:
     """Read live CPU%/RAM straight from the container's cgroup v2 files.
 
     The rootless-reliable fallback for when ``podman stats`` blanks CPU/MEM.
-    RAM comes from ``memory.current`` (one read); CPU% from the delta of
-    ``cpu.stat``'s cumulative ``usage_usec`` between calls (so the *first* call
-    after start yields CPU ``None`` — there's no prior sample to diff against).
+    RAM comes from :func:`_cgroup_memory_bytes` (``memory.current``, or summed
+    process RSS when the memory controller isn't delegated); CPU% from the delta
+    of ``cpu.stat``'s cumulative ``usage_usec`` between calls (so the *first*
+    call after start yields CPU ``None`` — no prior sample to diff against).
     Returns ``(cpu_pct, ram_used_gb, ram_pct)``; any field ``None`` on failure.
     Never raises.
     """
@@ -318,15 +359,12 @@ def _cgroup_cpu_ram(cfg: Config) -> tuple[float | None, float | None, float | No
 
     ram_used_gb: float | None = None
     ram_pct: float | None = None
-    try:
-        with open(f"{cgdir}/memory.current", encoding="ascii") as fh:
-            mem_bytes = int(fh.read().strip())
+    mem_bytes = _cgroup_memory_bytes(cgdir)
+    if mem_bytes is not None:
         ram_used_gb = mem_bytes / _BYTES_IN_GB
         cap_bytes = int(cfg.pod.ram_gb) * _BYTES_IN_GB
         if cap_bytes > 0:
             ram_pct = max(0.0, min(100.0, mem_bytes / cap_bytes * 100.0))
-    except (OSError, ValueError) as e:
-        log.debug("cgroup memory.current read failed: %s", e)
 
     cpu_pct: float | None = None
     try:
