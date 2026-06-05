@@ -208,12 +208,12 @@ class WinpodxWindow(
         if screen is not None:
             avail = screen.availableGeometry()
             if avail.width() > 0 and avail.height() > 0:
-                # Make the minimum size proportional to the screen so the window
-                # can shrink further on small / fractionally-scaled displays
-                # (the layouts reflow), while keeping a sane cap on large ones.
+                # Keep a readable minimum (so the monospace Terminal / Logs view
+                # and the forms don't crush), but never larger than the screen
+                # so the window still fits small / fractionally-scaled displays.
                 self.setMinimumSize(
-                    min(820, int(avail.width() * 0.5)),
-                    min(540, int(avail.height() * 0.55)),
+                    min(820, avail.width() - 60),
+                    min(560, avail.height() - 80),
                 )
                 w = max(self.minimumWidth(), min(pref_w, avail.width() - 60))
                 h = max(self.minimumHeight(), min(pref_h, avail.height() - 80))

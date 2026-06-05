@@ -356,6 +356,10 @@ class LogsMixin:
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
         self.log_output.setStyleSheet(TERMINAL)
+        # Readable floor: keep room for a sensible run of monospace columns so a
+        # narrow window scrolls the terminal rather than crushing its text. This
+        # propagates up to the window's own minimum size.
+        self.log_output.setMinimumWidth(440)
         layout.addWidget(self.log_output)
 
         cmd_row = QHBoxLayout()
