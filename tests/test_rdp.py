@@ -418,16 +418,29 @@ class TestBuildRdpCommand:
         assert any(c.startswith("/app:") for c in cmd)
         assert "/dynamic-resolution" not in cmd
 
-    def test_span_added_to_app_launch_by_default(self, cfg, monkeypatch):
-        # multimon defaults to "span": a RAIL app launch sizes the session
-        # desktop to the host monitor bounding box so a window dragged to a
+    def test_span_added_to_app_launch_uniform_scale(self, cfg, monkeypatch):
+        # multimon defaults to "span": with uniform monitor scales a RAIL app
+        # launch spans the host monitor bounding box so a window dragged to a
         # second monitor keeps input mapping (clicks would otherwise miss).
         monkeypatch.setattr(
             "winpodx.core.rdp.find_freerdp",
             lambda *a, **k: ("/usr/bin/xfreerdp3", "xfreerdp"),
         )
+        monkeypatch.setattr("winpodx.display.layout.has_mixed_scale", lambda: False)
         cmd, _ = build_rdp_command(cfg, app_executable="notepad.exe")
         assert "/span" in cmd
+        assert "/multimon" not in cmd
+
+    def test_span_omitted_on_mixed_scale(self, cfg, monkeypatch):
+        # Different per-monitor scales -> pin to the primary monitor (no /span):
+        # FreeRDP RAIL can't span mixed-scale monitors without freezing.
+        monkeypatch.setattr(
+            "winpodx.core.rdp.find_freerdp",
+            lambda *a, **k: ("/usr/bin/xfreerdp3", "xfreerdp"),
+        )
+        monkeypatch.setattr("winpodx.display.layout.has_mixed_scale", lambda: True)
+        cmd, _ = build_rdp_command(cfg, app_executable="notepad.exe")
+        assert "/span" not in cmd
         assert "/multimon" not in cmd
 
     def test_span_not_in_full_desktop_launch(self, cfg, monkeypatch):

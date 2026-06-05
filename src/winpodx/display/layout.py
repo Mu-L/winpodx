@@ -76,6 +76,119 @@ def parse_monitor_extent(listmonitors_output: str) -> tuple[int, int, int] | Non
     return count, width, height
 
 
+def _kde_monitor_scales() -> list[float] | None:
+    """Per-enabled-output scale via ``kscreen-doctor -j`` (KDE Plasma). None on
+    failure / not-KDE."""
+    if shutil.which("kscreen-doctor") is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["kscreen-doctor", "-j"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        log.debug("kscreen-doctor failed to run: %s", e)
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        import json
+
+        data = json.loads(result.stdout)
+        scales = [
+            float(o["scale"])
+            for o in data.get("outputs", [])
+            if o.get("enabled") and o.get("scale") is not None
+        ]
+    except (ValueError, KeyError, TypeError) as e:
+        log.debug("kscreen-doctor output unparseable: %s", e)
+        return None
+    return scales or None
+
+
+def _wlroots_monitor_scales() -> list[float] | None:
+    """Per-output scale via ``swaymsg`` / ``hyprctl`` (wlroots). None on failure."""
+    import json
+
+    if shutil.which("swaymsg") is not None:
+        try:
+            r = subprocess.run(
+                ["swaymsg", "-t", "get_outputs"],
+                capture_output=True,
+                text=True,
+                timeout=4,
+                check=False,
+            )
+            if r.returncode == 0:
+                outs = json.loads(r.stdout)
+                scales = [
+                    float(o["scale"])
+                    for o in outs
+                    if o.get("active", True) and o.get("scale") is not None
+                ]
+                if scales:
+                    return scales
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as e:
+            log.debug("swaymsg get_outputs failed: %s", e)
+
+    if shutil.which("hyprctl") is not None:
+        try:
+            r = subprocess.run(
+                ["hyprctl", "monitors", "-j"],
+                capture_output=True,
+                text=True,
+                timeout=4,
+                check=False,
+            )
+            if r.returncode == 0:
+                mons = json.loads(r.stdout)
+                scales = [float(m["scale"]) for m in mons if m.get("scale") is not None]
+                if scales:
+                    return scales
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as e:
+            log.debug("hyprctl monitors failed: %s", e)
+
+    return None
+
+
+def detect_monitor_scales() -> list[float] | None:
+    """Per-monitor display scale for every enabled output, or ``None``.
+
+    Tries KDE (``kscreen-doctor``) then wlroots (``swaymsg`` / ``hyprctl``).
+    These report the *compositor* scale (which XRandR logical geometry already
+    folds in, so it can't be recovered from xrandr alone). Never raises.
+    """
+    return _kde_monitor_scales() or _wlroots_monitor_scales()
+
+
+# Process-lifetime cache: probing the compositor (kscreen-doctor etc.) costs
+# ~seconds, and this is consulted on every RAIL launch -- but monitor scales
+# rarely change mid-session, and a change just needs a winpodx restart. Cleared
+# by tests via _MIXED_SCALE_CACHE.clear().
+_MIXED_SCALE_CACHE: dict[str, bool | None] = {}
+
+
+def has_mixed_scale() -> bool | None:
+    """``True`` when enabled monitors run at *different* scales, ``False`` when
+    uniform, ``None`` when undetectable / single monitor. Cached per process.
+
+    Mixed fractional scales are what makes FreeRDP RAIL + XWayland freeze a
+    window dragged across monitors (and makes ``/span`` non-tileable at
+    pre_connect), so :mod:`winpodx.core.rdp` pins the session to one monitor in
+    that case. Never raises.
+    """
+    if "value" not in _MIXED_SCALE_CACHE:
+        scales = detect_monitor_scales()
+        if not scales or len(scales) < 2:
+            _MIXED_SCALE_CACHE["value"] = None
+        else:
+            _MIXED_SCALE_CACHE["value"] = (max(scales) - min(scales)) > 0.01
+    return _MIXED_SCALE_CACHE["value"]
+
+
 def detect_x_screen_extent() -> tuple[int, int] | None:
     """Return the multi-monitor bounding box ``(width, height)`` in pixels.
 

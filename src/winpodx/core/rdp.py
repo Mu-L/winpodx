@@ -440,10 +440,31 @@ def build_rdp_command(
     # entirely). Scoped to RAIL app launches; the full-desktop path keeps
     # /dynamic-resolution instead. cfg.rdp.multimon "off" disables it for
     # non-rectangular layouts.
+    #
+    # /span only works when the monitors run at the SAME scale. With mixed
+    # fractional scales (e.g. a hi-DPI laptop + a 100% external) the logical
+    # rectangles don't tile (sub-pixel-rounding gap) so /span is refused at
+    # pre_connect, AND FreeRDP RAIL + XWayland can't map a window dragged onto
+    # the differently-scaled monitor -- it freezes / goes unresponsive (an
+    # upstream limit no client flag fixes). So when the scales differ we pin
+    # the session to a single monitor: the app is stable on the primary, and
+    # the only real fix for using both is to set them to the same scale.
     if app_executable or launch_uri:
         _multimon = getattr(cfg.rdp, "multimon", "span")
         if _multimon == "span":
-            cmd.append("/span")
+            from winpodx.display.layout import has_mixed_scale
+
+            if has_mixed_scale() is True:
+                log.warning(
+                    "Host monitors run at different scales; pinning the "
+                    "RemoteApp to the primary monitor. FreeRDP RAIL can't span "
+                    "mixed-scale monitors (a window dragged to the other one "
+                    "freezes) -- set both monitors to the same scale to use "
+                    "them together."
+                )
+                # No /span: single (primary) monitor desktop, stable there.
+            else:
+                cmd.append("/span")
         elif _multimon == "multimon":
             cmd.append("/multimon")
 
