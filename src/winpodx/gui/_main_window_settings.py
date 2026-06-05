@@ -897,7 +897,10 @@ class SettingsPageMixin:
         form = QGridLayout()
         form.setVerticalSpacing(SPACE_S + 2)
         form.setHorizontalSpacing(SPACE_M)
-        form.setColumnMinimumWidth(0, 150)
+        form.setColumnMinimumWidth(0, 110)
+        # The input column takes the slack so it (and the card) shrink with the
+        # window instead of forcing a fixed minimum that clips on narrow pages.
+        form.setColumnStretch(1, 1)
         lbl = QLabel(tr("Profile"))
         lbl.setStyleSheet(
             f"background: transparent; color: {C.SUBTEXT0}; font-size: {FONT_BODY}px;"
@@ -932,7 +935,7 @@ class SettingsPageMixin:
             f"'Cascadia Code', 'Fira Code', monospace; "
             f"font-size: {FONT_CAPTION}px; color: {C.SUBTEXT1};"
         )
-        self.tuning_summary_label.setWordWrap(False)
+        self.tuning_summary_label.setWordWrap(True)
         summary_layout.addWidget(self.tuning_summary_label)
         layout.addWidget(summary_frame)
 
@@ -1078,7 +1081,10 @@ class SettingsPageMixin:
         form = QGridLayout()
         form.setVerticalSpacing(SPACE_S + 2)
         form.setHorizontalSpacing(SPACE_M)
-        form.setColumnMinimumWidth(0, 150)
+        form.setColumnMinimumWidth(0, 110)
+        # The input column takes the slack so it (and the card) shrink with the
+        # window instead of forcing a fixed minimum that clips on narrow pages.
+        form.setColumnStretch(1, 1)
 
         for row, (label, widget) in enumerate(fields):
             lbl = QLabel(label)

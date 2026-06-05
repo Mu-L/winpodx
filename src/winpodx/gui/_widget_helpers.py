@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -83,86 +82,21 @@ class _WheelGuard(QObject):
 _WHEEL_GUARD = _WheelGuard()
 
 
-class FlowLayout(QLayout):
-    """A layout that lays widgets out left-to-right and wraps to the next line
-    when they don't fit the available width — so a row of toolbar buttons
-    reflows onto more lines on a narrow window instead of squishing / clipping.
-    (Adapted from Qt's standard FlowLayout example.)
-    """
-
-    def __init__(self, parent: QWidget | None = None, spacing: int = 6) -> None:
-        super().__init__(parent)
-        self._items: list = []
-        self.setContentsMargins(0, 0, 0, 0)
-        self.setSpacing(spacing)
-
-    def addItem(self, item) -> None:  # noqa: N802 - Qt signature
-        self._items.append(item)
-
-    def count(self) -> int:
-        return len(self._items)
-
-    def itemAt(self, index: int):  # noqa: N802
-        return self._items[index] if 0 <= index < len(self._items) else None
-
-    def takeAt(self, index: int):  # noqa: N802
-        return self._items.pop(index) if 0 <= index < len(self._items) else None
-
-    def expandingDirections(self):  # noqa: N802
-        return Qt.Orientation(0)
-
-    def hasHeightForWidth(self) -> bool:  # noqa: N802
-        return True
-
-    def heightForWidth(self, width: int) -> int:  # noqa: N802
-        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
-
-    def setGeometry(self, rect: QRect) -> None:  # noqa: N802
-        super().setGeometry(rect)
-        self._do_layout(rect, test_only=False)
-
-    def sizeHint(self) -> QSize:  # noqa: N802
-        return self.minimumSize()
-
-    def minimumSize(self) -> QSize:  # noqa: N802
-        size = QSize()
-        for item in self._items:
-            size = size.expandedTo(item.minimumSize())
-        margins = self.contentsMargins()
-        size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
-        return size
-
-    def _do_layout(self, rect: QRect, *, test_only: bool) -> int:
-        x, y, line_height = rect.x(), rect.y(), 0
-        spacing = self.spacing()
-        for item in self._items:
-            hint = item.sizeHint()
-            next_x = x + hint.width()
-            if next_x - rect.x() > rect.width() and line_height > 0:
-                x = rect.x()
-                y = y + line_height + spacing
-                next_x = x + hint.width()
-                line_height = 0
-            if not test_only:
-                item.setGeometry(QRect(QPoint(x, y), hint))
-            x = next_x + spacing
-            line_height = max(line_height, hint.height())
-        return y + line_height - rect.y()
-
-
 class ElidingLabel(QLabel):
     """A single-line label that elides ("…") its text to whatever width it's
-    given, instead of forcing a fixed minimum width (which would push siblings —
-    e.g. an Attach button — off the edge on narrow / scaled windows). The full
-    text stays available as a tooltip.
+    given. It *prefers* a capped width (so a row of these still reports a sane
+    sizeHint — used by ``columns_want_stack`` to decide when to stack columns)
+    but can shrink to 0 (``minimumSizeHint``), so when a column does get narrow
+    the text elides instead of pushing a sibling (e.g. an Attach button) off the
+    edge. The full text stays available as a tooltip.
     """
+
+    _PREF_CAP = 300  # preferred width ceiling (px) — keeps the card sizeHint sane
 
     def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._full = text
-        # Horizontal ``Ignored`` lets the label shrink to 0 so the row can fit a
-        # narrow column; the button keeps its natural size.
-        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.setMinimumWidth(0)
         self.set_full_text(text)
 
@@ -170,7 +104,15 @@ class ElidingLabel(QLabel):
         self._full = text or ""
         if self._full:
             self.setToolTip(self._full)
+        self.updateGeometry()
         self._apply_elide()
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        fm = self.fontMetrics()
+        return QSize(min(fm.horizontalAdvance(self._full) + 2, self._PREF_CAP), fm.height())
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return QSize(0, self.fontMetrics().height())
 
     def _apply_elide(self) -> None:
         fm = self.fontMetrics()
