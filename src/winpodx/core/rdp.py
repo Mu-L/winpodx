@@ -792,24 +792,99 @@ def _read_stderr_log(path: Path) -> str:
         return f"(could not read stderr log {path}: {exc})"
 
 
-def _raise_if_exited_immediately(session: RDPSession) -> None:
-    """Surface FreeRDP clients that die immediately after a successful spawn."""
+# A FreeRDP pre_connect failure that's a rejected host monitor layout: the
+# client dies before connecting (so the app never opens). Seen on KDE Plasma 6
+# Wayland + XWayland with mixed-DPI / fractional-scaled monitors, where the
+# secondary monitor's logical geometry comes through degenerate (e.g. a 31"
+# panel reported ~212 px wide, desktopScale 0) and FreeRDP rejects the spanned
+# desktop. The cure is to retry single-monitor (drop /span | /multimon).
+_MULTIMON_PRECONNECT_RE = re.compile(
+    r"ERRCONNECT_PRE_CONNECT_FAILED|freerdp_pre_connect failed",
+    re.IGNORECASE,
+)
+
+
+def _early_exit_stderr(session: RDPSession, *, settle: float = 0.5) -> str | None:
+    """Return FreeRDP's stderr if it died right after a successful spawn.
+
+    Returns ``None`` while the client is still alive after the settle window.
+    Used to surface clients that crash on connect (and, for a multi-monitor
+    span rejection, to drive the single-monitor retry in :func:`launch_app`).
+    """
     import time
 
     proc = session.process
     if proc is None:
-        return
+        return None
 
-    time.sleep(0.5)
+    time.sleep(settle)
     if proc.poll() is None:
-        return
+        return None
 
-    stderr_content = _read_stderr_log(session.stderr_log)
-    if not stderr_content:
-        stderr_content = "(stderr log was empty)"
-    raise RuntimeError(
-        f"FreeRDP exited immediately with rc={proc.returncode}. Stderr:\n{stderr_content}"
-    )
+    return _read_stderr_log(session.stderr_log) or "(stderr log was empty)"
+
+
+def _spawn_detached(session: RDPSession, cmd: list[str]) -> RDPSession:
+    """Acquire the PID lock and spawn a detached FreeRDP client for ``session``.
+
+    Returns ``session`` with ``.process`` set, or — if the lock is already held
+    by a concurrent launch — the live existing session (``.process is None`` on
+    our handle, the caller's cue not to start a reaper). The caller owns the
+    reaper / early-exit / UWP-relist steps so a failed spawn can be retried
+    (e.g. dropping ``/span``) without a reaper unlinking the retry's PID file.
+    """
+    import fcntl
+
+    # Open WITHOUT O_TRUNC: a plain "w" open empties the file before the real
+    # PID is written, so a concurrent reader (process.py's list_active_sessions
+    # / the idle monitor) could see an empty lock between flock and the write
+    # and unlink the live session's lock as "corrupt". Hold the prior contents
+    # until the PID is known, then ftruncate+write it as one mutation.
+    session.pid_file.parent.mkdir(parents=True, exist_ok=True)
+    lock_raw = os.open(session.pid_file, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(lock_raw, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(lock_raw)
+        existing = _find_existing_session(session.app_name)
+        if existing is not None:
+            return existing
+        raise RuntimeError(f"Could not acquire lock for {session.app_name}")
+
+    # stderr=PIPE would SIGPIPE-kill the detached client once the CLI parent
+    # exits; log to a file so the session outlives us. start_new_session=True
+    # puts the client in its own process group (PGID == this PID) and session.
+    # The FreeRDP client is a tree -- the Flatpak path is `flatpak run` ->
+    # bwrap -> xfreerdp -- and a SIGTERM to just the leader may not propagate
+    # through the nested sandbox to the real xfreerdp. Owning the group lets
+    # kill_session() signal the whole tree at once (os.killpg).
+    err_log = session.stderr_log.open("wb")
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=err_log,
+            start_new_session=True,
+        )
+        err_log.close()
+
+        session.process = proc
+
+        # Write the PID as the only mutation: truncate then write in one shot
+        # so a reader never observes a partially written / empty file.
+        pid_bytes = str(proc.pid).encode()
+        os.ftruncate(lock_raw, 0)
+        os.lseek(lock_raw, 0, os.SEEK_SET)
+        os.write(lock_raw, pid_bytes)
+        os.fsync(lock_raw)
+    except Exception:
+        session.pid_file.unlink(missing_ok=True)
+        raise
+    finally:
+        os.close(lock_raw)
+
+    return session
 
 
 _SESSION_STATE_PS = (
@@ -982,82 +1057,57 @@ def launch_app(
 
     log.info("Launching RDP: %s", " ".join(cmd))
 
-    # Acquire PID file lock before launching to prevent race conditions.
-    #
-    # Open WITHOUT O_TRUNC: a plain "w" open empties the file before the
-    # real PID is written below, so a concurrent reader (process.py's
-    # list_active_sessions / the idle monitor) could see an empty lock
-    # file between flock and the write and unlink the live session's lock
-    # as "corrupt". We hold the empty (or stale) contents until the PID is
-    # known, then ftruncate+write it as the single mutation under flock.
-    import fcntl
+    # Spawn detached + grab the PID lock. The reaper / UWP-relist threads start
+    # only after the settle window below, so a failed spawn can be retried
+    # (single-monitor, dropping /span) without the first reaper unlinking the
+    # retry's PID file.
+    session = _spawn_detached(RDPSession(app_name=app_name), cmd)
+    if session.process is None:
+        # A concurrent launch already owns this app -- return its live session.
+        return session
 
-    session = RDPSession(app_name=app_name)
-    session.pid_file.parent.mkdir(parents=True, exist_ok=True)
-    lock_raw = os.open(session.pid_file, os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        fcntl.flock(lock_raw, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        os.close(lock_raw)
-        existing = _find_existing_session(app_name)
-        if existing is not None:
-            return existing
-        raise RuntimeError(f"Could not acquire lock for {app_name}")
+    early = _early_exit_stderr(session)
 
-    # stderr=PIPE would SIGPIPE-kill the detached client once the CLI
-    # parent exits; log to a file so the session outlives us.
-    #
-    # start_new_session=True puts the client in its own process group (PGID ==
-    # this PID) and session. The FreeRDP client is actually a tree -- the
-    # Flatpak path is `flatpak run` -> bwrap -> xfreerdp -- and a SIGTERM to
-    # just the leader may not propagate through the nested sandbox to the real
-    # xfreerdp. Owning the group lets kill_session() signal the whole tree at
-    # once (os.killpg), so Terminate reliably ends the session. It also cleanly
-    # detaches the client from the CLI's session (it must outlive us).
-    err_log = session.stderr_log.open("wb")
-    try:
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=err_log,
-            start_new_session=True,
+    # Multi-monitor span rejected at pre_connect (mixed-DPI / fractional-scaled
+    # host monitors under KDE Wayland + XWayland leave the secondary monitor's
+    # geometry degenerate, so FreeRDP refuses the spanned desktop and the app
+    # never opens). Retry once single-monitor: drop /span | /multimon so the
+    # session is the primary monitor only. The RAIL window can't then be
+    # dragged onto the broken second monitor, but the app actually launches.
+    if (
+        early is not None
+        and _MULTIMON_PRECONNECT_RE.search(early)
+        and any(flag in ("/span", "/multimon") for flag in cmd)
+    ):
+        log.warning(
+            "FreeRDP pre_connect rejected the multi-monitor span (host monitor "
+            "layout -- likely mixed DPI / fractional scaling); retrying "
+            "single-monitor. Set cfg.rdp.multimon='off' to skip the span."
         )
-        err_log.close()
-
-        session.process = proc
-
-        # Write the PID as the only mutation: truncate then write in one
-        # shot so a reader never observes a partially written / empty file.
-        pid_bytes = str(proc.pid).encode()
-        os.ftruncate(lock_raw, 0)
-        os.lseek(lock_raw, 0, os.SEEK_SET)
-        os.write(lock_raw, pid_bytes)
-        os.fsync(lock_raw)
-    except Exception:
         session.pid_file.unlink(missing_ok=True)
-        raise
-    finally:
-        os.close(lock_raw)
+        cmd = [flag for flag in cmd if flag not in ("/span", "/multimon")]
+        log.info("Relaunching RDP (single-monitor): %s", " ".join(cmd))
+        session = _spawn_detached(RDPSession(app_name=app_name), cmd)
+        if session.process is None:
+            return session
+        early = _early_exit_stderr(session)
 
-    t = threading.Thread(
-        target=_reaper_thread,
-        args=(session,),
-        daemon=True,
-    )
-    t.start()
+    if early is not None:
+        session.pid_file.unlink(missing_ok=True)
+        rc = session.process.returncode if session.process else "?"
+        raise RuntimeError(f"FreeRDP exited immediately with rc={rc}. Stderr:\n{early}")
 
-    # UWP frames come over RAIL marked SKIP_TASKBAR/SKIP_PAGER (owned by
-    # ApplicationFrameHost, surfaced as a popup/dialog) -- re-list them so they
-    # show in the Linux taskbar. app_name == the /wm-class token for UWP.
+    # Survived the settle window -- now own the lifecycle. Reaper cleans up the
+    # PID file on exit; the UWP re-list pushes RAIL frames (owned by
+    # ApplicationFrameHost, marked SKIP_TASKBAR/SKIP_PAGER) back onto the Linux
+    # taskbar. app_name == the /wm-class token for UWP.
+    threading.Thread(target=_reaper_thread, args=(session,), daemon=True).start()
     if launch_uri is not None:
         threading.Thread(
             target=_relist_uwp_taskbar,
             args=(session.app_name,),
             daemon=True,
         ).start()
-
-    _raise_if_exited_immediately(session)
 
     return session
 

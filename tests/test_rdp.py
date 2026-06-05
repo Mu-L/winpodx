@@ -730,3 +730,92 @@ def test_relist_uwp_taskbar_noop_without_wmctrl(monkeypatch):
     monkeypatch.setattr(rdp.subprocess, "run", lambda *a, **k: calls.append(a))
     rdp._relist_uwp_taskbar("winpodx-uwp-foo-bar")
     assert calls == []
+
+
+class _FakeProc:
+    returncode = 0
+
+    def poll(self):
+        return None  # alive
+
+
+def _patch_launch_to_spawn(monkeypatch, tmp_path, cmd):
+    """Stub launch_app's surroundings so it reaches the spawn/early-exit path."""
+    from winpodx.core import rdp as rdp_mod
+
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setattr(rdp_mod, "runtime_dir", lambda: tmp_path)
+    monkeypatch.setattr(rdp_mod, "_find_existing_session", lambda _name: None)
+    monkeypatch.setattr(rdp_mod, "find_freerdp", lambda *a, **k: ("/usr/bin/xfreerdp", "xfreerdp"))
+    monkeypatch.setattr(rdp_mod, "build_rdp_command", lambda *a, **k: (list(cmd), ""))
+    monkeypatch.setattr(rdp_mod, "_reaper_thread", lambda _s: None)
+
+    spawned: list[list[str]] = []
+
+    def fake_spawn(session, spawn_cmd):
+        spawned.append(list(spawn_cmd))
+        session.process = _FakeProc()
+        return session
+
+    monkeypatch.setattr(rdp_mod, "_spawn_detached", fake_spawn)
+    return rdp_mod, spawned
+
+
+_PRECONNECT_ERR = "ERRCONNECT_PRE_CONNECT_FAILED [0x00020001]\nfreerdp_pre_connect failed"
+
+
+def test_launch_app_retries_single_monitor_on_span_preconnect_fail(monkeypatch, tmp_path):
+    # A spanned launch that FreeRDP rejects at pre_connect (mixed-DPI host
+    # monitors) must auto-retry once with /span dropped, and succeed.
+    rdp_mod, spawned = _patch_launch_to_spawn(
+        monkeypatch, tmp_path, ["xfreerdp", "/v:127.0.0.1", "/span", "notepad"]
+    )
+
+    seen = {"n": 0}
+
+    def fake_early(_session, **_kw):
+        seen["n"] += 1
+        return _PRECONNECT_ERR if seen["n"] == 1 else None  # fail once, then OK
+
+    monkeypatch.setattr(rdp_mod, "_early_exit_stderr", fake_early)
+
+    cfg = Config()
+    cfg.pod.backend = "manual"  # skip the interactive-session wait
+    session = rdp_mod.launch_app(cfg, app_executable="notepad.exe")
+
+    assert len(spawned) == 2
+    assert "/span" in spawned[0]
+    assert "/span" not in spawned[1]  # retry dropped the span
+    assert session.process is not None
+
+
+def test_launch_app_no_retry_when_no_span(monkeypatch, tmp_path):
+    # The same pre_connect failure without a span flag is a real error -- no
+    # retry, raise straight away.
+    rdp_mod, spawned = _patch_launch_to_spawn(
+        monkeypatch, tmp_path, ["xfreerdp", "/v:127.0.0.1", "notepad"]
+    )
+    monkeypatch.setattr(rdp_mod, "_early_exit_stderr", lambda _s, **_k: _PRECONNECT_ERR)
+
+    cfg = Config()
+    cfg.pod.backend = "manual"
+    with pytest.raises(RuntimeError, match="exited immediately"):
+        rdp_mod.launch_app(cfg, app_executable="notepad.exe")
+
+    assert len(spawned) == 1  # no retry
+
+
+def test_launch_app_healthy_spawn_starts_reaper_no_retry(monkeypatch, tmp_path):
+    # A clean launch (no early exit) spawns once and returns the live session.
+    rdp_mod, spawned = _patch_launch_to_spawn(
+        monkeypatch, tmp_path, ["xfreerdp", "/v:127.0.0.1", "/span", "notepad"]
+    )
+    monkeypatch.setattr(rdp_mod, "_early_exit_stderr", lambda _s, **_k: None)
+
+    cfg = Config()
+    cfg.pod.backend = "manual"
+    session = rdp_mod.launch_app(cfg, app_executable="notepad.exe")
+
+    assert len(spawned) == 1
+    assert "/span" in spawned[0]
+    assert session.process is not None
