@@ -155,9 +155,11 @@ class DevicesMixin:
         if cols is None or pages is None:
             return
         # Width the cards get is the stacked-pages width (window minus sidebar).
+        # Each column (device id + elided name + Attach/Detach button) needs
+        # ~460px, so two side by side need ~960; stack below that.
         want = (
             QBoxLayout.Direction.TopToBottom
-            if pages.width() < 840
+            if pages.width() < 960
             else QBoxLayout.Direction.LeftToRight
         )
         if cols.direction() != want:

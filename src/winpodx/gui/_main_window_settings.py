@@ -771,11 +771,13 @@ class SettingsPageMixin:
         pages = getattr(self, "pages", None)
         if cols is None or pages is None:
             return
-        # Width the cards actually get is the stacked-pages width (window
-        # minus the fixed sidebar). Below ~840px the two cards clip, so stack.
+        # Width the cards actually get is the stacked-pages width (window minus
+        # the fixed sidebar). The two cards (forms + combo rows) need ~960px to
+        # sit side by side without clipping on a fractionally-scaled display, so
+        # stack below that.
         want = (
             QBoxLayout.Direction.TopToBottom
-            if pages.width() < 840
+            if pages.width() < 960
             else QBoxLayout.Direction.LeftToRight
         )
         if cols.direction() != want:

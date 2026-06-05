@@ -155,7 +155,7 @@ class DashboardMixin:
             return
         want = (
             QBoxLayout.Direction.TopToBottom
-            if pages.width() < 900
+            if pages.width() < 960
             else QBoxLayout.Direction.LeftToRight
         )
         if row1.direction() != want:
