@@ -766,10 +766,13 @@ _PRECONNECT_ERR = "ERRCONNECT_PRE_CONNECT_FAILED [0x00020001]\nfreerdp_pre_conne
 
 def test_launch_app_retries_single_monitor_on_span_preconnect_fail(monkeypatch, tmp_path):
     # A spanned launch that FreeRDP rejects at pre_connect (mixed-DPI host
-    # monitors) must auto-retry once with /span dropped, and succeed.
+    # monitors) must auto-retry once with /span dropped, and succeed. With no
+    # readable X-screen extent (single monitor / no xrandr) the retry is plain
+    # single-monitor -- no /size added.
     rdp_mod, spawned = _patch_launch_to_spawn(
         monkeypatch, tmp_path, ["xfreerdp", "/v:127.0.0.1", "/span", "notepad"]
     )
+    monkeypatch.setattr("winpodx.display.layout.detect_x_screen_extent", lambda: None)
 
     seen = {"n": 0}
 
@@ -786,6 +789,33 @@ def test_launch_app_retries_single_monitor_on_span_preconnect_fail(monkeypatch, 
     assert len(spawned) == 2
     assert "/span" in spawned[0]
     assert "/span" not in spawned[1]  # retry dropped the span
+    assert not any(f.startswith("/size:") for f in spawned[1])  # no extent -> single
+    assert session.process is not None
+
+
+def test_launch_app_retries_geometry_size_on_span_preconnect_fail(monkeypatch, tmp_path):
+    # When the X-screen extent is known, the retry hands FreeRDP an explicit
+    # /size desktop spanning both monitors instead of falling to single-monitor.
+    rdp_mod, spawned = _patch_launch_to_spawn(
+        monkeypatch, tmp_path, ["xfreerdp", "/v:127.0.0.1", "/span", "notepad"]
+    )
+    monkeypatch.setattr("winpodx.display.layout.detect_x_screen_extent", lambda: (5334, 1600))
+
+    seen = {"n": 0}
+
+    def fake_early(_session, **_kw):
+        seen["n"] += 1
+        return _PRECONNECT_ERR if seen["n"] == 1 else None
+
+    monkeypatch.setattr(rdp_mod, "_early_exit_stderr", fake_early)
+
+    cfg = Config()
+    cfg.pod.backend = "manual"
+    session = rdp_mod.launch_app(cfg, app_executable="notepad.exe")
+
+    assert len(spawned) == 2
+    assert "/span" not in spawned[1]
+    assert "/size:5334x1600" in spawned[1]  # explicit both-monitor desktop
     assert session.process is not None
 
 

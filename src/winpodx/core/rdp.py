@@ -794,10 +794,12 @@ def _read_stderr_log(path: Path) -> str:
 
 # A FreeRDP pre_connect failure that's a rejected host monitor layout: the
 # client dies before connecting (so the app never opens). Seen on KDE Plasma 6
-# Wayland + XWayland with mixed-DPI / fractional-scaled monitors, where the
-# secondary monitor's logical geometry comes through degenerate (e.g. a 31"
-# panel reported ~212 px wide, desktopScale 0) and FreeRDP rejects the spanned
-# desktop. The cure is to retry single-monitor (drop /span | /multimon).
+# Wayland + XWayland with two monitors at different fractional scales, where
+# sub-pixel rounding leaves the logical rectangles non-tileable (a 1 px
+# gap/overlap at the boundary, mismatched heights, desktopScale reported as 0)
+# and FreeRDP refuses the spanned desktop. The cure is to retry without
+# /span | /multimon -- as an explicit /size desktop spanning both monitors when
+# the X-screen extent is known, else single-monitor.
 _MULTIMON_PRECONNECT_RE = re.compile(
     r"ERRCONNECT_PRE_CONNECT_FAILED|freerdp_pre_connect failed",
     re.IGNORECASE,
@@ -1068,25 +1070,48 @@ def launch_app(
 
     early = _early_exit_stderr(session)
 
-    # Multi-monitor span rejected at pre_connect (mixed-DPI / fractional-scaled
-    # host monitors under KDE Wayland + XWayland leave the secondary monitor's
-    # geometry degenerate, so FreeRDP refuses the spanned desktop and the app
-    # never opens). Retry once single-monitor: drop /span | /multimon so the
-    # session is the primary monitor only. The RAIL window can't then be
-    # dragged onto the broken second monitor, but the app actually launches.
+    # Multi-monitor span rejected at pre_connect. When two host monitors run at
+    # different fractional scales, the compositor's sub-pixel rounding leaves
+    # their logical rectangles non-tileable (a 1 px gap/overlap at the boundary,
+    # mismatched heights, per-monitor scale reported as 0), and FreeRDP's
+    # /span | /multimon path refuses a layout that doesn't tile into one
+    # contiguous region -- so the RemoteApp dies before opening.
+    #
+    # Retry once without /span | /multimon. If the host's overall X-screen
+    # bounding box is known (xrandr), hand FreeRDP an explicit single
+    # /size:WxH desktop covering BOTH monitors -- that skips the per-monitor
+    # tiling check while still letting a RAIL window live on either monitor
+    # (the coordinate space matches what xfreerdp paints into). If the extent
+    # can't be read (single monitor / no xrandr), fall back to the plain
+    # single-monitor desktop.
     if (
         early is not None
         and _MULTIMON_PRECONNECT_RE.search(early)
         and any(flag in ("/span", "/multimon") for flag in cmd)
     ):
-        log.warning(
-            "FreeRDP pre_connect rejected the multi-monitor span (host monitor "
-            "layout -- likely mixed DPI / fractional scaling); retrying "
-            "single-monitor. Set cfg.rdp.multimon='off' to skip the span."
-        )
+        from winpodx.display.layout import detect_x_screen_extent
+
         session.pid_file.unlink(missing_ok=True)
         cmd = [flag for flag in cmd if flag not in ("/span", "/multimon")]
-        log.info("Relaunching RDP (single-monitor): %s", " ".join(cmd))
+        extent = detect_x_screen_extent()
+        if extent is not None and not any(f.startswith("/size:") for f in cmd):
+            width, height = extent
+            cmd.append(f"/size:{width}x{height}")
+            log.warning(
+                "FreeRDP pre_connect rejected the multi-monitor span (mixed "
+                "DPI / fractional scaling makes the layout non-tileable); "
+                "retrying with an explicit %dx%d desktop spanning both monitors.",
+                width,
+                height,
+            )
+        else:
+            log.warning(
+                "FreeRDP pre_connect rejected the multi-monitor span (host "
+                "monitor layout -- likely mixed DPI / fractional scaling); "
+                "retrying single-monitor. Set cfg.rdp.multimon='off' to skip "
+                "the span."
+            )
+        log.info("Relaunching RDP: %s", " ".join(cmd))
         session = _spawn_detached(RDPSession(app_name=app_name), cmd)
         if session.process is None:
             return session
