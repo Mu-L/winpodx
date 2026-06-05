@@ -127,7 +127,10 @@ class DashboardMixin:
         scroll.setWidget(inner)
         outer.addWidget(scroll, 1)
 
-        # Live refresh while this page is shown (started/stopped by the nav).
+        # Live refresh while this page is shown. The nav starts/stops it on page
+        # switch, but the Dashboard is the default page shown at startup -- no
+        # switch fires for it -- so start the timer here too, or the panel would
+        # only ever auto-refresh after navigating away and back.
         self._dashboard_timer = QTimer(self)
         self._dashboard_timer.setInterval(_REFRESH_MS)
         self._dashboard_timer.timeout.connect(self._refresh_dashboard)
@@ -136,6 +139,7 @@ class DashboardMixin:
         self._populate_workspace()
         self._refresh_dashboard()
         self._reflow_dashboard()
+        self._dashboard_timer.start()
         return page
 
     def _reflow_dashboard(self) -> None:
