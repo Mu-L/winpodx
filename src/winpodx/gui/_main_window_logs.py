@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 
 from winpodx.core.config import Config
 from winpodx.core.i18n import tr
-from winpodx.gui._widget_helpers import make_page_header
+from winpodx.gui._widget_helpers import FlowLayout, make_page_header
 from winpodx.gui.icons import load_icon
 from winpodx.gui.theme import (
     BTN_GHOST,
@@ -261,9 +261,10 @@ class LogsMixin:
         layout.setSpacing(SPACE_M)
 
         actions = QWidget()
-        actions_l = QHBoxLayout(actions)
-        actions_l.setContentsMargins(0, 0, 0, 0)
-        actions_l.setSpacing(SPACE_S)
+        # FlowLayout so the toolbar (log-level combo + Status/Inspect/RDP Test/
+        # Clear buttons) wraps onto more lines on a narrow window instead of
+        # squishing the buttons.
+        actions_l = FlowLayout(actions, spacing=SPACE_S)
 
         # Log level dropdown — changes both what gets written to
         # ``~/.config/winpodx/winpodx.log`` (which the "Live (app)"

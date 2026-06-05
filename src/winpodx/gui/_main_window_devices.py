@@ -19,7 +19,6 @@ CLI never drift.
 from __future__ import annotations
 
 from PySide6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, Signal
-from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QBoxLayout,
     QDialog,
@@ -38,6 +37,7 @@ from winpodx.core import devices as D
 from winpodx.core.config import Config
 from winpodx.core.i18n import tr
 from winpodx.gui._widget_helpers import (
+    ElidingLabel,
     add_shadow,
     columns_want_stack,
     make_empty_panel,
@@ -270,16 +270,13 @@ class DevicesMixin:
         h.addWidget(badge, 0, Qt.AlignTop)
 
         full_label = host.label or tr("(unknown)")
-        text = QLabel()
         # Device id reads as the primary line; the (often long) label sits
-        # below as calmer secondary text.
-        did_lbl = QLabel(host.did)
+        # below as calmer secondary text. Both elide to the available width so a
+        # narrow column shrinks the text instead of pushing the Attach button
+        # off the right edge.
+        did_lbl = ElidingLabel(host.did)
         did_lbl.setStyleSheet(f"color: {C.TEXT}; font-size: {FONT_BODY}px; font-weight: 500;")
-        # Elide the label with a real "…" rather than a hard slice, and expose
-        # the full text on hover so nothing is lost.
-        metrics = QFontMetrics(text.font())
-        elided = metrics.elidedText(full_label, Qt.TextElideMode.ElideRight, 240)
-        label_lbl = QLabel(elided)
+        label_lbl = ElidingLabel(full_label)
         label_lbl.setStyleSheet(f"color: {C.SUBTEXT0}; font-size: {FONT_CAPTION}px;")
 
         text_host = QWidget()
