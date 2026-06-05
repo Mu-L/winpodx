@@ -356,8 +356,15 @@ class DashboardMixin:
             self._gauge_cpu.set_value(snap.cpu_pct, f"{snap.cpu_pct:.0f}%")
 
         if snap.ram_pct is None:
-            self._gauge_ram.set_value(None, tr("n/a"))
+            # RAM comes from the guest agent on the slow cadence (like disk);
+            # keep the last value between probes instead of blanking to "n/a".
+            cached_ram = getattr(self, "_last_ram", None)
+            if cached_ram is not None:
+                self._gauge_ram.set_value(cached_ram, f"{cached_ram:.0f}%")
+            else:
+                self._gauge_ram.set_value(None, tr("n/a"))
         else:
+            self._last_ram = snap.ram_pct
             self._gauge_ram.set_value(snap.ram_pct, f"{snap.ram_pct:.0f}%")
 
         if snap.disk_pct is None or snap.disk_total_gb is None:
