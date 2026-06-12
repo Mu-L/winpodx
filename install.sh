@@ -1094,6 +1094,26 @@ fi
 # anyway. Without this guard the container starts but the VM never
 # boots, and the user sees a silent stall instead of the actionable
 # diagnostic below.
+#
+# #541: /dev/kvm is often absent simply because the kvm kernel module
+# isn't loaded -- even though the CPU fully supports virtualization
+# (vmx/svm flags present; e.g. confirmed by VirtualBox working on the
+# same box). Try to load it before failing -- many "virtualization
+# unsupported" reports just needed a modprobe.
+if [ ! -e /dev/kvm ] && grep -Eq '(vmx|svm)' /proc/cpuinfo 2>/dev/null; then
+    if grep -q 'vmx' /proc/cpuinfo 2>/dev/null; then KVM_MOD=kvm_intel; else KVM_MOD=kvm_amd; fi
+    log "/dev/kvm missing but the CPU reports virtualization (vmx/svm) -- loading $KVM_MOD..."
+    sudo modprobe "$KVM_MOD" 2>/dev/null || true
+    if [ -e /dev/kvm ]; then
+        KVM_PRESENT=true
+        log "/dev/kvm is now present -- hardware virtualization enabled."
+        # Persist so it auto-loads on the next boot (don't make the user redo this).
+        if [ -d /etc/modules-load.d ]; then
+            printf '%s\n' "$KVM_MOD" | sudo tee /etc/modules-load.d/winpodx-kvm.conf >/dev/null 2>&1 || true
+        fi
+    fi
+fi
+
 if [ ! -e /dev/kvm ]; then
     err "/dev/kvm still missing after package install."
     err ""
