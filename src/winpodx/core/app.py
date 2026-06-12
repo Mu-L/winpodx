@@ -125,6 +125,25 @@ def unsuppress_app_slug(slug: str) -> None:
         pass
 
 
+def clear_suppressed_slugs() -> int:
+    """Drop every deletion tombstone so the next discovery re-adds them (#530).
+
+    Powers the GUI's "Re-detect all" — undeletes every app the user previously
+    removed in one shot. Returns the number of tombstones cleared. The apps
+    themselves reappear on the next discovery sweep (their ``discovered/<slug>``
+    dirs were removed on delete), so callers should trigger a refresh after.
+    """
+    current = suppressed_app_slugs()
+    if not current:
+        return 0
+    try:
+        _suppressed_file().unlink(missing_ok=True)
+    except OSError as e:  # noqa: BLE001
+        log.warning("could not clear suppressed-app list: %s", e)
+        return 0
+    return len(current)
+
+
 _VALID_APP_SOURCES = frozenset({"discovered", "user"})
 
 

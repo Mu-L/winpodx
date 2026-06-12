@@ -902,5 +902,17 @@
   "Remove selected": "删除所选",
   "Remove Apps": "删除应用",
   "Remove {n} selected app profiles?\nThis only removes the profiles, not the Windows apps.": "删除选中的 {n} 个应用配置？\n仅删除配置，不会删除 Windows 应用。",
-  "Removed {n} apps": "已删除 {n} 个应用"
+  "Removed {n} apps": "已删除 {n} 个应用",
+  "Deleted": "已删除",
+  "Restore apps you previously deleted": "恢复您之前删除的应用",
+  "Deleted ({n})": "已删除 ({n})",
+  "Restoring {n} app(s) — re-scanning…": "正在恢复 {n} 个应用 — 重新扫描…",
+  "Reset": "重置",
+  "Restore the auto-detected profile + icon": "恢复自动检测的配置 + 图标",
+  "Deleted Apps": "已删除的应用",
+  "Restore deleted apps": "恢复已删除的应用",
+  "Apps you removed are tombstoned so discovery won't re-add them. Restore brings one back on the next scan.": "您删除的应用会被标记，以免重新扫描时再次添加。恢复后将在下次扫描时重新出现。",
+  "No deleted apps.": "没有已删除的应用。",
+  "Restore all": "全部恢复",
+  "Restore": "恢复"
 }

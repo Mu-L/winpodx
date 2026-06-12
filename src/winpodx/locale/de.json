@@ -902,5 +902,17 @@
   "Remove selected": "Auswahl entfernen",
   "Remove Apps": "Apps entfernen",
   "Remove {n} selected app profiles?\nThis only removes the profiles, not the Windows apps.": "{n} ausgewählte App-Profile entfernen?\nDies entfernt nur die Profile, nicht die Windows-Apps.",
-  "Removed {n} apps": "{n} Apps entfernt"
+  "Removed {n} apps": "{n} Apps entfernt",
+  "Deleted": "Gelöscht",
+  "Restore apps you previously deleted": "Zuvor gelöschte Apps wiederherstellen",
+  "Deleted ({n})": "Gelöscht ({n})",
+  "Restoring {n} app(s) — re-scanning…": "{n} App(s) werden wiederhergestellt — erneut suchen…",
+  "Reset": "Zurücksetzen",
+  "Restore the auto-detected profile + icon": "Automatisch erkanntes Profil + Symbol wiederherstellen",
+  "Deleted Apps": "Gelöschte Apps",
+  "Restore deleted apps": "Gelöschte Apps wiederherstellen",
+  "Apps you removed are tombstoned so discovery won't re-add them. Restore brings one back on the next scan.": "Entfernte Apps werden markiert, damit die Erkennung sie nicht erneut hinzufügt. Wiederherstellen bringt sie beim nächsten Scan zurück.",
+  "No deleted apps.": "Keine gelöschten Apps.",
+  "Restore all": "Alle wiederherstellen",
+  "Restore": "Wiederherstellen"
 }

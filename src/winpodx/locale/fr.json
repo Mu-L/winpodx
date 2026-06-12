@@ -902,5 +902,17 @@
   "Remove selected": "Supprimer la sélection",
   "Remove Apps": "Supprimer les applications",
   "Remove {n} selected app profiles?\nThis only removes the profiles, not the Windows apps.": "Supprimer {n} profils d'application sélectionnés ?\nCela supprime uniquement les profils, pas les applications Windows.",
-  "Removed {n} apps": "{n} applications supprimées"
+  "Removed {n} apps": "{n} applications supprimées",
+  "Deleted": "Supprimés",
+  "Restore apps you previously deleted": "Restaurer les applications précédemment supprimées",
+  "Deleted ({n})": "Supprimés ({n})",
+  "Restoring {n} app(s) — re-scanning…": "Restauration de {n} application(s) — nouvelle analyse…",
+  "Reset": "Réinitialiser",
+  "Restore the auto-detected profile + icon": "Restaurer le profil détecté automatiquement + l'icône",
+  "Deleted Apps": "Applications supprimées",
+  "Restore deleted apps": "Restaurer les applications supprimées",
+  "Apps you removed are tombstoned so discovery won't re-add them. Restore brings one back on the next scan.": "Les applications supprimées sont marquées pour que la détection ne les rajoute pas. La restauration les fait réapparaître au prochain scan.",
+  "No deleted apps.": "Aucune application supprimée.",
+  "Restore all": "Tout restaurer",
+  "Restore": "Restaurer"
 }

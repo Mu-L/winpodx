@@ -902,5 +902,17 @@
   "Remove selected": "選択項目を削除",
   "Remove Apps": "アプリを削除",
   "Remove {n} selected app profiles?\nThis only removes the profiles, not the Windows apps.": "選択した {n} 個のアプリプロファイルを削除しますか?\nプロファイルのみが削除され、Windows アプリは削除されません。",
-  "Removed {n} apps": "{n} 個のアプリを削除しました"
+  "Removed {n} apps": "{n} 個のアプリを削除しました",
+  "Deleted": "削除済み",
+  "Restore apps you previously deleted": "以前に削除したアプリを復元",
+  "Deleted ({n})": "削除済み ({n})",
+  "Restoring {n} app(s) — re-scanning…": "{n} 個のアプリを復元中 — 再スキャン…",
+  "Reset": "リセット",
+  "Restore the auto-detected profile + icon": "自動検出されたプロファイル + アイコンを復元",
+  "Deleted Apps": "削除されたアプリ",
+  "Restore deleted apps": "削除されたアプリを復元",
+  "Apps you removed are tombstoned so discovery won't re-add them. Restore brings one back on the next scan.": "削除したアプリは再検出で再追加されないようマークされます。復元すると次のスキャンで再び表示されます。",
+  "No deleted apps.": "削除されたアプリはありません。",
+  "Restore all": "すべて復元",
+  "Restore": "復元"
 }

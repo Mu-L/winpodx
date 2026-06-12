@@ -159,6 +159,7 @@ class AppCrudMixin:
     def _reload_apps(self) -> None:
         self.apps = list_available_apps()
         self._refresh_hidden_button()
+        self._refresh_deleted_button()
         # Clear any active search WITHOUT firing textChanged -> _filter_apps:
         # _refresh_launcher_home() below already triggers the single rebuild.
         # Two back-to-back rebuilds of app_list_layout raced Qt's heightForWidth

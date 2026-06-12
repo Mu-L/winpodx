@@ -514,6 +514,53 @@ def test_batch_remove_aborts_on_no(monkeypatch, tmp_path):
     assert host._selected_names == {"keep"}  # selection preserved
 
 
+# -- restore deleted apps (#530 follow-up) --------------------------------
+
+
+def test_clear_suppressed_slugs(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    from winpodx.core.app import (
+        clear_suppressed_slugs,
+        suppress_app_slug,
+        suppressed_app_slugs,
+    )
+
+    assert clear_suppressed_slugs() == 0  # nothing to clear
+    suppress_app_slug("paint")
+    suppress_app_slug("notepad")
+    assert suppressed_app_slugs() == {"paint", "notepad"}
+    assert clear_suppressed_slugs() == 2  # both tombstones dropped
+    assert suppressed_app_slugs() == set()
+
+
+def test_restore_deleted_slugs_partial_vs_all(monkeypatch, tmp_path):
+    """The GUI restore handler clears all tombstones for a full restore, else
+    unsuppresses just the chosen slugs -- driven on a minimal fake host."""
+    import pytest
+
+    pytest.importorskip("PySide6")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    from winpodx.core.app import suppress_app_slug, suppressed_app_slugs
+    from winpodx.gui._main_window_library import LibraryPageMixin
+
+    for s in ("paint", "notepad", "wordpad"):
+        suppress_app_slug(s)
+
+    refreshed = []
+    host = type("H", (), {})()
+    host._on_refresh_apps = lambda: refreshed.append(True)
+    host.info_label = type("L", (), {"setText": lambda self, t: None})()
+
+    # partial restore -> only that slug comes off the tombstone list
+    LibraryPageMixin._restore_deleted_slugs(host, ["notepad"])
+    assert suppressed_app_slugs() == {"paint", "wordpad"}
+    assert refreshed == [True]  # re-scan triggered
+
+    # restoring the remaining set (== full list) clears everything
+    LibraryPageMixin._restore_deleted_slugs(host, ["paint", "wordpad"])
+    assert suppressed_app_slugs() == set()
+
+
 # -- checksum-gated re-extraction (periodic icon refresh) ------------------
 
 _H1 = "a" * 64
