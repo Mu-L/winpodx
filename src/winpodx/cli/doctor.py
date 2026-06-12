@@ -494,11 +494,20 @@ def _desktop_entry_path(app) -> "object":
 
 
 def _apps_missing_desktop_entries() -> list:
-    """Return AppInfo objects that have no ``.desktop`` file installed."""
+    """Return AppInfo objects that have no ``.desktop`` file installed.
+
+    Skips apps the user has hidden: hiding an app deliberately removes its
+    ``.desktop`` entry (see ``core.app.set_app_hidden``), so a hidden app
+    legitimately has none. Counting those as "missing" made ``doctor`` flag
+    every app the user cleaned out of the launcher and offer ``--fix`` to
+    re-register them — which would silently un-hide them all (#535).
+    """
     from winpodx.core.app import list_available_apps
 
     missing = []
     for app in list_available_apps():
+        if getattr(app, "hidden", False):
+            continue
         if not _desktop_entry_path(app).exists():
             missing.append(app)
     return missing

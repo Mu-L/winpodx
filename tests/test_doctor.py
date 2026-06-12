@@ -252,10 +252,11 @@ class TestStaleLockFixer:
 
 
 class _FakeApp:
-    def __init__(self, name, mime_types=None):
+    def __init__(self, name, mime_types=None, hidden=False):
         self.name = name
         self.full_name = name
         self.mime_types = mime_types or []
+        self.hidden = hidden
 
 
 class _ExistsPath:
@@ -276,6 +277,16 @@ class TestMissingDesktopEntryFixer:
         )
         missing = doctor._apps_missing_desktop_entries()
         assert [a.name for a in missing] == ["beta"]
+
+    def test_hidden_apps_not_flagged_missing(self, monkeypatch):
+        """A hidden app legitimately has no .desktop entry; doctor must not
+        report it as missing (which --fix would re-register = un-hide) (#535)."""
+        apps = [_FakeApp("alpha"), _FakeApp("hiddenapp", hidden=True)]
+        monkeypatch.setattr("winpodx.core.app.list_available_apps", lambda: apps)
+        # neither has a .desktop on disk
+        monkeypatch.setattr(doctor, "_desktop_entry_path", lambda app: _ExistsPath(False))
+        missing = doctor._apps_missing_desktop_entries()
+        assert [a.name for a in missing] == ["alpha"]  # hidden one skipped
 
     def test_fix_reregisters(self, monkeypatch):
         apps = [_FakeApp("beta", mime_types=["text/plain"])]
