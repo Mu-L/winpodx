@@ -651,13 +651,48 @@ def _write_disguise_smbios_blob(oem_dir: str) -> str | None:
         from winpodx.core.pod.smbios import build_disguise_smbios_blob
 
         blob = build_disguise_smbios_blob()
-        (Path(oem_dir) / "winpodx-smbios.bin").write_bytes(blob)
+        blob_file = Path(oem_dir) / "winpodx-smbios.bin"
+        blob_file.write_bytes(blob)
+        _relabel_blob_for_container(blob_file)
         return "/oem/winpodx-smbios.bin"
     except Exception:  # noqa: BLE001 — disguise must never break compose / boot
         logging.getLogger(__name__).exception(
             "disguise: failed to write SMBIOS blob; continuing without it"
         )
         return None
+
+
+def _relabel_blob_for_container(blob_file: Path) -> None:
+    """Give the freshly-written blob an SELinux label the QEMU container can read.
+
+    The ``/oem`` bind mount uses ``:Z``, which podman relabels to a *private*
+    MCS category (``container_file_t:s0:c<x>,c<y>``) **once, at container
+    creation**. The disguise blob lives in the package OEM dir, which an
+    ``install.sh`` update replaces — so the blob is often re-written *after* the
+    container already exists, keeping its default ``home_bin_t`` / user label.
+    A confined container then can't read it and QEMU aborts boot
+    (``Cannot read SMBIOS file /oem/winpodx-smbios.bin``) → the pod crash-loops.
+
+    Setting the blob to ``container_file_t:s0`` (no MCS category) makes it
+    readable by *any* ``:Z`` container, because a private category set dominates
+    the empty one. Best-effort: a no-op when SELinux isn't enforcing or ``chcon``
+    is missing, and never raises.
+    """
+    import shutil
+    import subprocess
+
+    chcon = shutil.which("chcon")
+    if not chcon:
+        return
+    try:
+        subprocess.run(
+            [chcon, "-t", "container_file_t", str(blob_file)],
+            check=False,
+            capture_output=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 def _disguise_disk_size(cfg: Config) -> str:

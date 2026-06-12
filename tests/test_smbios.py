@@ -172,3 +172,43 @@ def test_disguise_smbios_args_no_qemu_in_any_value(monkeypatch):
     for elem in args:
         assert "QEMU" not in elem, f"element {elem!r} contains 'QEMU'"
         assert "qemu" not in elem.lower(), f"element {elem!r} contains 'qemu'"
+
+
+# -- disguise blob SELinux relabel (crash-loop fix) -----------------------
+
+
+def test_relabel_blob_noop_without_chcon(monkeypatch, tmp_path):
+    import shutil
+    import subprocess
+
+    monkeypatch.setattr(shutil, "which", lambda _n: None)
+    called = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: called.append(a))
+    p = tmp_path / "winpodx-smbios.bin"
+    p.write_bytes(b"x")
+    _compose_module._relabel_blob_for_container(p)
+    assert called == []  # no chcon on PATH -> no subprocess call
+
+
+def test_relabel_blob_invokes_chcon(monkeypatch, tmp_path):
+    import shutil
+    import subprocess
+
+    monkeypatch.setattr(shutil, "which", lambda _n: "/usr/bin/chcon")
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **k: calls.append(cmd))
+    p = tmp_path / "winpodx-smbios.bin"
+    p.write_bytes(b"x")
+    _compose_module._relabel_blob_for_container(p)
+    assert calls, "chcon should be invoked when present"
+    assert calls[0][:3] == ["/usr/bin/chcon", "-t", "container_file_t"]
+    assert calls[0][-1] == str(p)
+
+
+def test_write_blob_relabels_after_write(monkeypatch, tmp_path):
+    seen = []
+    monkeypatch.setattr(_compose_module, "_relabel_blob_for_container", lambda p: seen.append(p))
+    path = _compose_module._write_disguise_smbios_blob(str(tmp_path))
+    assert path == "/oem/winpodx-smbios.bin"
+    assert (tmp_path / "winpodx-smbios.bin").exists()
+    assert len(seen) == 1  # relabel attempted right after the write
