@@ -467,6 +467,18 @@ foreach ($d in $startDirs) {
 Write-WinpodxProgress 'Scanning UWP / MSIX packages...'
 try {
     $pkgs = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue
+    # Canonical Start-menu names keyed by AUMID. Many UWP manifests give the
+    # display name as an `ms-resource:` indirection that PowerShell can't resolve
+    # non-interactively -- the package name then falls back to the dotted
+    # PackageFamilyName (e.g. "Microsoft.Windows.Photos"), which the host junk
+    # filter drops. Get-StartApps resolves the real label ("Photos"), so real
+    # apps aren't lost and we don't depend on a hardcoded allowlist (#545).
+    $startAppNames = @{}
+    try {
+        Get-StartApps -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($_.AppID) { $startAppNames[[string]$_.AppID] = [string]$_.Name }
+        }
+    } catch { }
     foreach ($pkg in $pkgs) {
         try {
             if ($pkg.IsFramework) { continue }
@@ -506,6 +518,11 @@ try {
                         $dn = [string]$ve.DisplayName
                         if ($dn -and ($dn -notmatch '^ms-resource:')) {
                             $displayName = $dn
+                        }
+                        # Canonical Start-menu name wins (resolves ms-resource
+                        # display names so e.g. Photos isn't dropped as dotted junk).
+                        if ($startAppNames.ContainsKey($aumid)) {
+                            $displayName = $startAppNames[$aumid]
                         }
                         # AppxManifest's <VisualElements Description="..."> is the
                         # Start-menu tooltip -- exactly what we want for the
