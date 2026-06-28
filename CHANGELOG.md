@@ -9,10 +9,6 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
-### Changed
-
-- **Bundled rdprrap bumped 0.1.3 → 0.3.0.** rdprrap (the multi-session RDP wrapper that lets each RemoteApp window get its own session) now derives its `termsrv.dll` patch sites **dynamically** — it disassembles each target function at runtime and encodes the patch bytes, instead of relying on hardcoded struct offsets / register choices / byte templates. This keeps multi-session working across Windows build-to-build `termsrv.dll` struct-layout shifts. OEM version 27 → 28, so existing installs pick it up on the next `winpodx guest sync` / `apply-fixes`.
-
 ### Fixed
 
 - **`--win-iso` now actually installs from your ISO instead of downloading Windows anyway** (#647, thanks @ismikes). The local ISO was staged into `<storage>/custom.iso` *after* `winpodx setup` had already run `compose up` — so the container had booted and dockur had started its Microsoft download before the file existed (dockur looks for `custom.iso` the moment it boots). The staging now happens **inside `winpodx setup`**, after the storage path is resolved but **before the container is (re)created**, so dockur finds the ISO and installs from it. Also exposed as `winpodx setup --win-iso <path>`.

@@ -9,10 +9,6 @@
 
 ## [Unreleased]
 
-### Changed
-
-- **번들 rdprrap 0.1.3 → 0.3.0.** rdprrap(각 RemoteApp 창에 독립 세션을 주는 멀티세션 RDP wrapper)이 `termsrv.dll` 패치 지점을 **동적으로** 도출합니다 — 하드코딩된 struct 오프셋/레지스터/바이트 템플릿 대신 런타임에 각 타겟 함수를 디스어셈블해 패치 바이트를 인코딩. Windows 빌드별 `termsrv.dll` 구조 변화에도 멀티세션이 유지됩니다. OEM 버전 27 → 28이라 기존 설치는 다음 `winpodx guest sync` / `apply-fixes` 때 반영.
-
 ### Fixed
 
 - **`--win-iso`가 이제 다운로드 대신 실제로 그 ISO에서 설치함** (#647, @ismikes 기여 감사). 로컬 ISO가 `winpodx setup`이 이미 `compose up`을 돌린 *뒤*에 `<storage>/custom.iso`로 스테이징돼서, 컨테이너가 이미 부팅되고 dockur가 Microsoft 다운로드를 시작한 다음에야 파일이 생겼습니다(dockur는 부팅 순간 `custom.iso`를 찾음). 이제 스테이징이 **`winpodx setup` 내부**에서 storage 경로 확정 후 **컨테이너 (재)생성 전**에 일어나, dockur가 ISO를 찾아 설치합니다. `winpodx setup --win-iso <path>`로도 노출.
