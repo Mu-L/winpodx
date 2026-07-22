@@ -9,6 +9,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **telemetry / ads / widgets 디블로트 프리셋의 개인정보 대응 범위를 확장** (#696, @GameSoul7Eugene 감사). 세 개의 레지스트리 조정 스크립트에 추가 옵트아웃 항목이 더해졌고, 각 항목은 undo 스크립트에 대응되는 복원 항목을 함께 갖습니다: 활동 기록 / 타임라인 업로드, 손글씨·잉킹 오류/데이터 수집, 온라인 음성 인식, 입력 인사이트(암묵적 잉크·텍스트) 수집, Windows 피드백 빈도(Siuf), 클라우드 검색 기록(MSA / AAD / 장치), "웹사이트의 언어 목록 접근" 옵트아웃, 그리고 기존 Windows 11 위젯 정책과 함께 Windows 10 작업 표시줄 Feeds(뉴스 및 관심 콘텐츠) 키가 포함됩니다. 원본 PR의 더 공격적인 항목들 — `CompatTelRunner.exe` 이미지 파일 실행(IFEO) 하이재킹, SafeSearch 끄기, Store 앱 자동 업데이트 차단, 위치 센서 및 Connected Devices Platform 서비스 비활성화, 클라우드 설정 동기화 토글 — 은 일회용 VM에서 범위를 벗어나거나 앱 호환성 위험이 있어 이 서브셋에서 의도적으로 제외했습니다.
+
 ### Fixed
 
 - **이전 시도에서 남은 podman 볼륨이 그대로 있을 때 `winpodx setup --storage-path` / `--win-iso`가 조용히 무시되던 문제를 수정** (#767, @realahmed7777 감사). `winpodx.toml`을 지워도 named 볼륨은 제거되지 않으므로, setup이 기존 설치를 발견해 VM을 이전 디스크에 그대로 두고 커스텀 ISO 스테이징도 건너뛰었습니다 — 게다가 유일한 신호는 "Setup Complete" 배너 전에 스크롤로 밀려 사라지는 한 줄짜리 안내뿐이었습니다(그 결과 dockur는 사용자가 더 넓은 ext4 경로로 기대한 위치에 "BTRFS filesystem for /storage" 경고를 남기고, Windows는 그대로 다운로드했습니다). 이제 setup은 요청한 경로, 여전히 사용 중인 위치, 그리고 재배치 방법(`winpodx setup --migrate-storage --migrate-storage-target <path>`) 또는 완전히 새로 시작하는 방법(이전 볼륨 제거 / `winpodx uninstall --purge`)을 명시한 눈에 띄는 프레임 경고를 표시하고, 스크롤로 사라지지 않도록 최종 배너 직전에 다시 출력합니다. 스토리지 결정 동작 자체는 그대로입니다 — 기존 설치를 재배치하려면 여전히 `--migrate-storage`가 필요하며, 이번 변경은 무시 사실을 놓칠 수 없게 만들 뿐입니다.

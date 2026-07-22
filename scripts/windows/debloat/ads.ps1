@@ -40,6 +40,9 @@ $adValues = @(
     # Don't show the Windows "welcome experience" after updates and occasionally when signing in to highlight what's new and suggested
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SubscribedContent-310093Enabled"; Value=0},
 
+    # Don't let websites provide locally relevant content by accessing my language list
+    @{Path="HKCU:\Control Panel\International\User Profile"; Name="HttpAcceptLanguageOptOut"; Value=1},
+
     # Other yet unnamed ContentDeliveryManager options to disable as well
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="ContentDeliveryAllowed"; Value=0},
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="FeatureManagementEnabled"; Value=0},
@@ -61,5 +64,6 @@ foreach ($item in $adValues) {
     Set-ItemProperty -Path $item.Path -Name $item.Name -Value $item.Value -Type DWord -Force -ErrorAction SilentlyContinue
 }
 
-# Advertising ID itself will be removed on either ad enable / disable, as an exception to the list
+# Advertising ID and language list themselves will be removed on either ad enable / disable, as an exception to the list
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" -Name "Id" -Force -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Internet Explorer\International" -Name "AcceptLanguage" -Force -ErrorAction SilentlyContinue

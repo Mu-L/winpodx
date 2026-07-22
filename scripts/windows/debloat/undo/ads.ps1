@@ -18,6 +18,7 @@ $adValues = @(
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SubscribedContent-353696Enabled"},
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SubscribedContent-338389Enabled"},
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SubscribedContent-310093Enabled"},
+    @{Path="HKCU:\Control Panel\International\User Profile"; Name="HttpAcceptLanguageOptOut"},
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="ContentDeliveryAllowed"},
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="FeatureManagementEnabled"},
     @{Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="OemPreInstalledAppsEnabled"},
@@ -37,5 +38,6 @@ foreach ($item in $adValues) {
     Remove-ItemProperty -Path $item.Path -Name $item.Name -Force -ErrorAction SilentlyContinue
 }
 
-# Advertising ID itself will be removed on either ad enable / disable, as an exception to the list
+# Advertising ID and language list themselves will be removed on either ad enable / disable, as an exception to the list
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" -Name "Id" -Force -ErrorAction SilentlyContinue
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Internet Explorer\International" -Name "AcceptLanguage" -Force -ErrorAction SilentlyContinue
