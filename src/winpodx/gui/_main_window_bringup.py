@@ -1028,8 +1028,9 @@ class BringUpMixin:
           With dockur's ``restart: unless-stopped`` a bad QEMU arg boot-loops, so
           this lets phase 1 fail fast with the real reason instead of waiting out
           the whole budget.
-        * ``progress`` — a short human line (latest ``❯`` status, or
-          ``Downloading Windows NN%`` from the wget dot-rows) for the dialog.
+        * ``progress`` — the latest ``❯`` status line (or ``Downloading
+          Windows NN%`` from the wget dot-rows); full text — the dialog
+          wraps it for the summary display.
         * ``installing`` — True when dockur is actively downloading/installing, so
           phase 1 can extend its budget past the normal pod-ready window.
         """
@@ -1079,8 +1080,8 @@ class BringUpMixin:
                 break
         if pct is not None and (status is None or "Download" in (status or "")):
             progress = f"Downloading Windows: {pct}%"
-        elif status:
-            progress = status[:80]
+        else:
+            progress = status
         return qemu_error, progress, installing
 
     def _phase1_wait_pod_ready(self) -> bool:
