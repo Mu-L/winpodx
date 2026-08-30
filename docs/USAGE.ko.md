@@ -304,6 +304,7 @@ scale = 100                  # DE 에서 자동 감지
 dpi = 0                      # Windows DPI % (0 = 자동)
 multimon = "span"            # 멀티모니터 RAIL: span | multimon | off
 freerdp_source = "auto"      # auto = RAIL 호환 native 우선, 아니면 Flatpak; native | flatpak 강제 가능
+media_drive_enabled = true    # false = 호스트 이동식 미디어를 \\tsclient\media로 공유 안 함
 extra_flags = ""             # 추가 FreeRDP 플래그 (allowlist); 예:
                              #   "+multitouch" — 터치스크린 / 스타일러스 / 펜을
                              #   Windows 앱에 패스스루 (#623)
@@ -350,5 +351,7 @@ level = "INFO"                                   # DEBUG | INFO | WARNING | ERRO
 ```
 
 `winpodx config set <key> <value>` 또는 에디터로 직접 수정 — TOML 은 3.11+ 에서 stdlib (`tomli` on 3.9/3.10) 로 파싱.
+
+`rdp.media_drive_enabled` 기본값은 호환성을 위해 `true`입니다. `false`로 설정하면 FreeRDP의 `/drive:media,...` 매핑을 생략하여 호스트에 마운트된 이동식 저장장치가 게스트의 `\\tsclient\media`에 나타나지 않습니다. 원시 USB 장치 패스스루 설정은 변경하지 않습니다.
 
 신규 aarch64 설정은 대응하는 `ghcr.io/dockur/windows-arm@sha256:...` 패키지를 사용합니다. Docker Hub pin 및 사설 미러를 포함한 비어 있지 않은 `pod.image` 값은 업그레이드 중 그대로 유지됩니다. 최신 공식 GHCR 이미지로 명시적으로 갱신할 때만 `winpodx setup --update-image`를 실행하세요.
