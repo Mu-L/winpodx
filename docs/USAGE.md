@@ -301,6 +301,7 @@ scale = 100                  # Auto-detected from your DE
 dpi = 0                      # Windows DPI % (0 = auto)
 multimon = "span"            # Multi-monitor RAIL: span | multimon | off
 freerdp_source = "auto"      # auto = RAIL-ready native, otherwise Flatpak; force native | flatpak
+media_drive_enabled = true    # false = do not expose host removable media as \\tsclient\media
 extra_flags = ""             # Additional FreeRDP flags (allowlisted); e.g.
                              #   "+multitouch" — touchscreen / stylus / pen
                              #   passthrough into Windows apps (#623)
@@ -347,5 +348,7 @@ level = "INFO"                                   # DEBUG | INFO | WARNING | ERRO
 ```
 
 Edit via `winpodx config set <key> <value>` or directly with your editor — TOML is parsed via the stdlib on Python 3.11+ (`tomli` on 3.9/3.10).
+
+`rdp.media_drive_enabled` defaults to `true` for compatibility. Set it to `false` to omit FreeRDP's `/drive:media,...` mapping, preventing mounted host removable storage from appearing at `\\tsclient\media` in the guest. This does not change raw USB device passthrough.
 
 Fresh aarch64 setups use the matching `ghcr.io/dockur/windows-arm@sha256:...` package. A non-empty `pod.image` is preserved across upgrades, including Docker Hub pins and private mirrors; run `winpodx setup --update-image` only when you explicitly want the latest official GHCR image.
