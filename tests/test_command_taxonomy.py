@@ -33,6 +33,21 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _REPO = Path(__file__).parent.parent
+_DOCTOR_CHEAP_CHECKS = (
+    "_check_install_source",
+    "_check_freerdp",
+    "_check_kvm",
+    "_check_rootless_subid",
+    "_check_compose_provider",
+    "_check_host_ports",
+    "_check_config_state",
+    "_check_pending_setup",
+    "_check_autostart_entry",
+    "_check_initialized_flag",
+    "_check_stale_locks",
+    "_check_missing_desktop_entries",
+)
+_DOCTOR_SLOW_CHECKS = ("_check_agent_health", "_check_oem_drift")
 
 
 def _parse(argv: list[str]) -> argparse.Namespace | None:
@@ -73,15 +88,7 @@ class TestDoctorJson:
         from winpodx.cli.doctor import Finding, handle_doctor
 
         ok = Finding("ok", "stub-title", detail="d", suggestion="s")
-        for name in (
-            "_check_install_source",
-            "_check_freerdp",
-            "_check_kvm",
-            "_check_config_state",
-            "_check_pending_setup",
-            "_check_autostart_entry",
-            "_check_initialized_flag",
-        ):
+        for name in (*_DOCTOR_CHEAP_CHECKS, *_DOCTOR_SLOW_CHECKS):
             monkeypatch.setattr(f"winpodx.cli.doctor.{name}", lambda: ok)
         monkeypatch.setattr("winpodx.cli.doctor._check_container_backend", lambda: [ok])
         monkeypatch.setattr("winpodx.cli.doctor._check_container_health", lambda: [ok])
@@ -102,15 +109,7 @@ class TestDoctorJson:
 
         fail = Finding("fail", "broken", detail="detail", suggestion="fix it")
         ok = Finding("ok", "fine")
-        for name in (
-            "_check_install_source",
-            "_check_freerdp",
-            "_check_kvm",
-            "_check_config_state",
-            "_check_pending_setup",
-            "_check_autostart_entry",
-            "_check_initialized_flag",
-        ):
+        for name in (*_DOCTOR_CHEAP_CHECKS, *_DOCTOR_SLOW_CHECKS):
             monkeypatch.setattr(f"winpodx.cli.doctor.{name}", lambda: fail)
         monkeypatch.setattr("winpodx.cli.doctor._check_container_backend", lambda: [ok])
         monkeypatch.setattr("winpodx.cli.doctor._check_container_health", lambda: [ok])
@@ -128,15 +127,7 @@ class TestDoctorJson:
         from winpodx.cli.doctor import Finding, handle_doctor
 
         ok = Finding("ok", "t", detail="", suggestion="")
-        for name in (
-            "_check_install_source",
-            "_check_freerdp",
-            "_check_kvm",
-            "_check_config_state",
-            "_check_pending_setup",
-            "_check_autostart_entry",
-            "_check_initialized_flag",
-        ):
+        for name in (*_DOCTOR_CHEAP_CHECKS, *_DOCTOR_SLOW_CHECKS):
             monkeypatch.setattr(f"winpodx.cli.doctor.{name}", lambda: ok)
         monkeypatch.setattr("winpodx.cli.doctor._check_container_backend", lambda: [ok])
         monkeypatch.setattr("winpodx.cli.doctor._check_container_health", lambda: [ok])
@@ -161,15 +152,7 @@ class TestDoctorQuick:
         from winpodx.cli.doctor import Finding, handle_doctor
 
         ok = Finding("ok", "stub")
-        for name in (
-            "_check_install_source",
-            "_check_freerdp",
-            "_check_kvm",
-            "_check_config_state",
-            "_check_pending_setup",
-            "_check_autostart_entry",
-            "_check_initialized_flag",
-        ):
+        for name in _DOCTOR_CHEAP_CHECKS:
             monkeypatch.setattr(f"winpodx.cli.doctor.{name}", lambda: ok)
         monkeypatch.setattr("winpodx.cli.doctor._check_container_backend", lambda: [ok])
 
@@ -199,15 +182,7 @@ class TestDoctorQuick:
 
             return _probe
 
-        cheap_names = (
-            "_check_install_source",
-            "_check_freerdp",
-            "_check_kvm",
-            "_check_config_state",
-            "_check_pending_setup",
-            "_check_autostart_entry",
-            "_check_initialized_flag",
-        )
+        cheap_names = _DOCTOR_CHEAP_CHECKS
         for n in cheap_names:
             monkeypatch.setattr(f"winpodx.cli.doctor.{n}", _make_probe(n))
         monkeypatch.setattr("winpodx.cli.doctor._check_container_backend", lambda: [ok])
@@ -225,15 +200,7 @@ class TestDoctorQuick:
         from winpodx.cli.doctor import Finding, handle_doctor
 
         ok = Finding("ok", "stub")
-        for name in (
-            "_check_install_source",
-            "_check_freerdp",
-            "_check_kvm",
-            "_check_config_state",
-            "_check_pending_setup",
-            "_check_autostart_entry",
-            "_check_initialized_flag",
-        ):
+        for name in (*_DOCTOR_CHEAP_CHECKS, *_DOCTOR_SLOW_CHECKS):
             monkeypatch.setattr(f"winpodx.cli.doctor.{name}", lambda: ok)
         monkeypatch.setattr("winpodx.cli.doctor._check_container_backend", lambda: [ok])
 

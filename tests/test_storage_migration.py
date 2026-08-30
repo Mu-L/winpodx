@@ -161,7 +161,7 @@ class TestExecuteMigration:
         cfg = self._cfg(tmp_path, monkeypatch)
         src = tmp_path / "src"
         src.mkdir()
-        target = tmp_path / "target"
+        target = Path.home() / "target"
 
         plan = sm.MigrationPlan(
             backend="podman",
