@@ -1839,8 +1839,9 @@ fi
 #     still flapping during first boot.
 #
 #   * UPGRADE (prior config existed): `winpodx migrate`. migrate FIRST pushes
-#     the refreshed guest scripts into the existing guest (guest_sync) + pins
-#     the image + shows release notes, THEN runs the same apply -> discovery ->
+#     the refreshed guest scripts into the existing guest (guest_sync), refreshes
+#     compose while preserving the configured image, and shows release notes,
+#     THEN runs the same apply -> discovery ->
 #     reverse-open chain. Skipping migrate (as the first item-B cut did) left
 #     upgraded guests running STALE agent.ps1 / OEM scripts.
 #

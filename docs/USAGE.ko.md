@@ -319,7 +319,7 @@ auto_start = false                               # opt-in 로그인 자동시작
 idle_timeout = 0                                 # 자동 suspend 까지 초 (0 = 비활성)
 idle_action = "pause"                            # idle timeout 동작: pause | stop
 boot_timeout = 300                               # 첫 부팅 unattended 설치 대기 초
-image = "docker.io/dockurr/windows@sha256:..."   # 릴리스에서 pin 된 이미지 (에어갭 미러용 override)
+image = "ghcr.io/dockur/windows@sha256:..."      # release pin 된 공식 이미지 (에어갭 미러용 override)
 usb_live = true                                  # 레거시 호환 키; live USB 는 usbredir 사용 — `winpodx device` 참고
 home_share = ""                                  # 비어있으면 Home 전체; 절대 경로를 지정하면 그 디렉터리만 \\tsclient\home 으로 공유 (#758)
 # disguise_level = "balanced"                    # bare-metal 모드: off | balanced(기본, 무손실 숨김) | max(Hyper-V 끔, 느려짐) — Nvidia code-43 / VM 거부 앱; 안티치트 우회 아님 (#246)
@@ -349,3 +349,5 @@ level = "INFO"                                   # DEBUG | INFO | WARNING | ERRO
 ```
 
 `winpodx config set <key> <value>` 또는 에디터로 직접 수정 — TOML 은 3.11+ 에서 stdlib (`tomli` on 3.9/3.10) 로 파싱.
+
+신규 aarch64 설정은 대응하는 `ghcr.io/dockur/windows-arm@sha256:...` 패키지를 사용합니다. Docker Hub pin 및 사설 미러를 포함한 비어 있지 않은 `pod.image` 값은 업그레이드 중 그대로 유지됩니다. 최신 공식 GHCR 이미지로 명시적으로 갱신할 때만 `winpodx setup --update-image`를 실행하세요.

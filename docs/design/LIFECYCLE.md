@@ -162,7 +162,7 @@ The only path that mutates the guest is migrate. install.sh itself is purely hos
 Regardless of version (when an existing config is present):
 
 1. **`_probe_password_sync`** — pre-flight FreeRDP auth probe. If the password drifted (cfg vs Windows account out of sync), prints a diagnostic pointing at `winpodx pod sync-password`.
-2. **`_ensure_canonical_image_pin`** — rewrites `cfg.pod.image` and `compose.yaml` to `DOCKUR_IMAGE_PIN` if they don't match. One container recreate cost on next `pod start` (volume preserved — ~30 s, no ISO redownload). Idempotent: matching pins → no-op.
+2. **`_refresh_compose_for_upgrade`** — regenerates `compose.yaml` from the persisted config without replacing `cfg.pod.image`. If the template changed, recreates the container with its storage volume preserved.
 3. **`_apply_runtime_fixes_to_existing_guest`** — calls `apply_windows_runtime_fixes(cfg)` ([§6](#6-apply-chain-apply_windows_runtime_fixes)).
 
 ### 5.3 Steps that run on cross-version upgrade only
@@ -292,32 +292,31 @@ This belt-and-suspenders avoids cycling TermService on pods that are *already* w
 
 ## 8. Container image pinning
 
-**Code.** `DOCKUR_IMAGE_PIN` constant in `src/winpodx/core/config.py`.
+**Code.** `DOCKUR_IMAGE_PIN` and `DOCKUR_IMAGE_ARM_PIN` in `src/winpodx/core/config.py`.
 
 **Why.** Pre-pin (≤ v0.3.0), `cfg.pod.image` defaulted to `:latest`. Every `podman-compose up` re-resolved the tag against whatever dockur had pushed. When the digest changed (frequent — dockur's release cadence is daily-ish), podman-compose treated the spec as different and **recreated the container** → fresh ISO download → multi-minute Sysprep → loss of guest state.
 
-**Format.** `docker.io/dockurr/windows@sha256:<64-char-hex>`.
+**Format.** `ghcr.io/dockur/windows[-arm]@sha256:<64-char-hex>`.
 
 **Update procedure (release-time).**
 
 ```
-TOKEN=$(curl -sSL "https://auth.docker.io/token?service=registry.docker.io&scope=repository:dockurr/windows:pull" | jq -r .token)
-curl -sSL -H "Authorization: Bearer $TOKEN" -I \
-  -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
-  -H 'Accept: application/vnd.oci.image.index.v1+json' \
-  "https://registry-1.docker.io/v2/dockurr/windows/manifests/latest" \
-  | grep -i '^docker-content-digest:'
+podman pull ghcr.io/dockur/windows:latest
+podman image inspect ghcr.io/dockur/windows:latest -f '{{json .RepoDigests}}'
+podman pull ghcr.io/dockur/windows-arm:latest
+podman image inspect ghcr.io/dockur/windows-arm:latest -f '{{json .RepoDigests}}'
 ```
 
-Paste the digest into `DOCKUR_IMAGE_PIN`, bump version, ship.
+Paste the matching repository digests into `DOCKUR_IMAGE_PIN` and
+`DOCKUR_IMAGE_ARM_PIN`, bump version, ship.
 
-**Migration.** Migrate's `_ensure_canonical_image_pin` rewrites `cfg.pod.image` + `compose.yaml` for existing pods. One container recreate on next `pod start` (volume preserved — ~30 s, no ISO redownload, no Sysprep). Idempotent.
+**Migration.** `_refresh_compose_for_upgrade` preserves a non-empty configured image, including Docker Hub pins and private mirrors, while regenerating `compose.yaml`. It recreates the container only when the rendered compose changes.
 
 **User opt-in update.** `winpodx setup --update-image` is the **only** path that ever pulls a fresh `:latest`:
 
-1. `podman pull docker.io/dockurr/windows:latest`
+1. `podman pull ghcr.io/dockur/windows:latest` (or `windows-arm` on aarch64)
 2. `podman image inspect ... -f '{{json .RepoDigests}}'` → resolve to digest
-3. Filter to docker.io entry → `cfg.pod.image := <digest>`
+3. Select the exact GHCR repository entry → `cfg.pod.image := <digest>`
 4. Regenerate `compose.yaml`
 5. Print "next pod start will recreate container ~30 s, volume preserved"
 
@@ -588,7 +587,7 @@ Windows app.
 
 **Cause (pre-PR #83).** `image: :latest` re-resolved by podman-compose. dockur pushed a new `:latest` since last `up`. New digest → spec mismatch → recreate.
 
-**Fix.** Migrate (PR #83's `_ensure_canonical_image_pin`) rewrites compose to a pinned digest. Future `:latest` pushes don't disturb the user.
+**Fix.** Fresh setups use a digest pin. Existing `:latest` users can run `winpodx setup --update-image` once; later migrations preserve that resolved pin while refreshing compose.
 
 ### 14.5 Discovery returns empty / partial
 

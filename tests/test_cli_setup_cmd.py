@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -493,3 +494,123 @@ def test_handle_setup_rejects_unreachable_selected_daemon(
     ):
         setup_cmd.handle_setup(_args())
     assert "Cannot use the podman backend: Podman" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("backend", ["podman", "docker"])
+def test_update_image_pin_uses_exact_x86_ghcr_repository(backend: str) -> None:
+    cfg = Config()
+    cfg.pod.backend = backend
+    cfg.pod.image = "docker.io/dockurr/windows@sha256:old"
+    ghcr_pin = f"ghcr.io/dockur/windows@sha256:{'a' * 64}"
+    run = MagicMock(
+        side_effect=[
+            subprocess.CompletedProcess([], 0),
+            subprocess.CompletedProcess(
+                [],
+                0,
+                stdout=json.dumps(
+                    [
+                        f"docker.io/dockurr/windows@sha256:{'b' * 64}",
+                        ghcr_pin,
+                    ]
+                ),
+                stderr="",
+            ),
+        ]
+    )
+    fake_subprocess = SimpleNamespace(
+        run=run,
+        CalledProcessError=subprocess.CalledProcessError,
+    )
+
+    with (
+        patch("winpodx.core.config.Config.load", return_value=cfg),
+        patch("shutil.which", return_value=f"/usr/bin/{backend}"),
+        patch("platform.machine", return_value="x86_64"),
+        patch.dict(sys.modules, {"subprocess": fake_subprocess}),
+        patch.object(cfg, "save") as save,
+        patch("winpodx.core.compose.generate_compose") as generate_compose,
+    ):
+        result = setup_cmd._update_image_pin()
+
+    assert result == 0
+    assert run.call_args_list[0] == call(
+        [backend, "pull", "ghcr.io/dockur/windows:latest"], check=True
+    )
+    assert run.call_args_list[1].args[0][3] == "ghcr.io/dockur/windows:latest"
+    assert cfg.pod.image == ghcr_pin
+    save.assert_called_once_with()
+    generate_compose.assert_called_once_with(cfg)
+
+
+def test_update_image_pin_uses_exact_arm_ghcr_repository() -> None:
+    cfg = Config()
+    cfg.pod.backend = "podman"
+    cfg.pod.image = "docker.io/dockurr/windows-arm@sha256:old"
+    ghcr_pin = f"ghcr.io/dockur/windows-arm@sha256:{'c' * 64}"
+    run = MagicMock(
+        side_effect=[
+            subprocess.CompletedProcess([], 0),
+            subprocess.CompletedProcess([], 0, stdout=json.dumps([ghcr_pin]), stderr=""),
+        ]
+    )
+    fake_subprocess = SimpleNamespace(
+        run=run,
+        CalledProcessError=subprocess.CalledProcessError,
+    )
+
+    with (
+        patch("winpodx.core.config.Config.load", return_value=cfg),
+        patch("shutil.which", return_value="/usr/bin/podman"),
+        patch("platform.machine", return_value="aarch64"),
+        patch.dict(sys.modules, {"subprocess": fake_subprocess}),
+        patch.object(cfg, "save") as save,
+        patch("winpodx.core.compose.generate_compose") as generate_compose,
+    ):
+        result = setup_cmd._update_image_pin()
+
+    assert result == 0
+    assert run.call_args_list[0] == call(
+        ["podman", "pull", "ghcr.io/dockur/windows-arm:latest"], check=True
+    )
+    assert run.call_args_list[1].args[0][3] == "ghcr.io/dockur/windows-arm:latest"
+    assert cfg.pod.image == ghcr_pin
+    save.assert_called_once_with()
+    generate_compose.assert_called_once_with(cfg)
+
+
+def test_update_image_pin_rejects_digest_from_another_registry() -> None:
+    cfg = Config()
+    cfg.pod.backend = "podman"
+    original_image = "registry.example/windows@sha256:keep"
+    cfg.pod.image = original_image
+    run = MagicMock(
+        side_effect=[
+            subprocess.CompletedProcess([], 0),
+            subprocess.CompletedProcess(
+                [],
+                0,
+                stdout=json.dumps([f"docker.io/dockurr/windows@sha256:{'d' * 64}"]),
+                stderr="",
+            ),
+        ]
+    )
+    fake_subprocess = SimpleNamespace(
+        run=run,
+        CalledProcessError=subprocess.CalledProcessError,
+    )
+
+    with (
+        patch("winpodx.core.config.Config.load", return_value=cfg),
+        patch("shutil.which", return_value="/usr/bin/podman"),
+        patch("platform.machine", return_value="x86_64"),
+        patch.dict(sys.modules, {"subprocess": fake_subprocess}),
+        patch.object(cfg, "save") as save,
+        patch("winpodx.core.compose.generate_compose") as generate_compose,
+    ):
+        result = setup_cmd._update_image_pin()
+
+    assert result == 3
+    assert cfg.pod.image == original_image
+    save.assert_not_called()
+    generate_compose.assert_not_called()
