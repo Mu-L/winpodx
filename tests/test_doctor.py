@@ -20,6 +20,7 @@ from winpodx.cli.doctor import (
     handle_doctor,
 )
 from winpodx.core.config import Config
+from winpodx.core.guest_sync import GuestVersion
 from winpodx.utils.deps import DepCheck
 
 
@@ -634,6 +635,55 @@ class TestDeadAgentFixer:
         monkeypatch.setattr("winpodx.core.guest_sync._wait_agent_back", lambda c, **kw: False)
         ok, _ = doctor._fix_dead_agent()
         assert not ok
+
+
+def _patch_oem_versions(
+    monkeypatch: pytest.MonkeyPatch,
+    guest: GuestVersion,
+    host: GuestVersion,
+) -> None:
+    cfg = argparse.Namespace(pod=argparse.Namespace(backend="podman"))
+    monkeypatch.setattr("winpodx.core.config.Config.load", staticmethod(lambda: cfg))
+    monkeypatch.setattr(doctor, "_pod_running", lambda _cfg: True)
+    monkeypatch.setattr("winpodx.core.guest_sync.read_guest_version", lambda _cfg: guest)
+    monkeypatch.setattr("winpodx.core.guest_sync.host_version", lambda: host)
+
+
+class TestOemDriftCheck:
+    def test_winpodx_version_change_is_not_oem_drift(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_oem_versions(
+            monkeypatch,
+            GuestVersion(winpodx="0.10.3", oem_bundle="44"),
+            GuestVersion(winpodx="0.10.4", oem_bundle="44"),
+        )
+
+        finding = doctor._check_oem_drift()
+
+        assert finding.severity == "ok"
+
+    def test_oem_bundle_change_reports_drift(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_oem_versions(
+            monkeypatch,
+            GuestVersion(winpodx="0.10.4", oem_bundle="43"),
+            GuestVersion(winpodx="0.10.4", oem_bundle="44"),
+        )
+
+        finding = doctor._check_oem_drift()
+
+        assert finding.severity == "warn"
+        assert finding.fix_id == "oem_drift"
+
+    def test_both_version_changes_report_oem_drift(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _patch_oem_versions(
+            monkeypatch,
+            GuestVersion(winpodx="0.10.3", oem_bundle="43"),
+            GuestVersion(winpodx="0.10.4", oem_bundle="44"),
+        )
+
+        finding = doctor._check_oem_drift()
+
+        assert finding.severity == "warn"
+        assert finding.fix_id == "oem_drift"
 
 
 class TestOemDriftFixer:

@@ -872,7 +872,7 @@ def _check_oem_drift() -> Finding:
         # NOT sync here (it would race first-boot), so this is not a drift
         # finding -- report OK and let the normal start path stamp it.
         return Finding("ok", "guest version stamp absent (fresh/pre-stamp pod)")
-    if guest == host:
+    if guest.oem_bundle == host.oem_bundle:
         return Finding("ok", f"guest version current ({guest.oem_bundle})")
     return Finding(
         "warn",
