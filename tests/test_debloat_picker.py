@@ -7,6 +7,7 @@ Runs headless via ``QApplication([])`` -- no display server required.
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 
@@ -16,7 +17,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 PySide6 = pytest.importorskip("PySide6")
 from winpodx.core.debloat import load_catalog  # noqa: E402
-from winpodx.gui.debloat_picker import DebloatPickerDialog  # noqa: E402
+from winpodx.core.i18n import tr  # noqa: E402
+from winpodx.gui.debloat_picker import _PRESET_DESCRIPTIONS, DebloatPickerDialog  # noqa: E402
+from winpodx.gui.theme import C  # noqa: E402
 
 
 def _ensure_qapp():
@@ -98,6 +101,20 @@ class TestPresetToggling:
         finally:
             dlg.deleteLater()
 
+    def test_direct_custom_selection_keeps_items_and_refreshes_description(self, qapp, catalog):
+        dlg = DebloatPickerDialog(catalog)
+        try:
+            before_items = dlg.selected_items()
+            before_desc = dlg._preset_desc.text()
+            dlg._custom_button.setChecked(True)
+            assert dlg.selected_items() == before_items
+            assert dlg._custom_button.isChecked()
+            assert not dlg._preset_buttons["normal"].isChecked()
+            assert dlg._preset_desc.text() != before_desc
+            assert dlg._preset_desc.text() == tr(_PRESET_DESCRIPTIONS["custom"])
+        finally:
+            dlg.deleteLater()
+
 
 class TestSelectedItems:
     def test_returns_catalog_order(self, qapp, catalog):
@@ -115,5 +132,85 @@ class TestSelectedItems:
             for box in dlg._item_boxes.values():
                 box.setChecked(False)
             assert dlg.selected_items() == []
+        finally:
+            dlg.deleteLater()
+
+
+def _css_decls(body: str) -> dict[str, str]:
+    decls: dict[str, str] = {}
+    for part in body.split(";"):
+        if ":" not in part:
+            continue
+        key, value = part.split(":", 1)
+        decls[key.strip()] = value.strip()
+    return decls
+
+
+def _css_rules(css: str) -> dict[str, str]:
+    return {sel.strip(): body for sel, body in re.findall(r"([^{]+)\{([^}]*)\}", css)}
+
+
+def _indicator_geometry(
+    body: str, fallback: tuple[str, str, str] | None = None
+) -> tuple[str, str, str]:
+    decls = _css_decls(body)
+    width = decls.get("width")
+    height = decls.get("height")
+    border = decls.get("border-width") or decls.get("border")
+    border_width = border.split()[0] if border else None
+    if fallback is not None:
+        width = width or fallback[0]
+        height = height or fallback[1]
+        border_width = border_width or fallback[2]
+    assert width is not None
+    assert height is not None
+    assert border_width is not None
+    return width, height, border_width
+
+
+class TestRadioIndicatorGeometry:
+    def test_checked_and_unchecked_indicators_share_total_geometry(self, qapp, catalog):
+        dlg = DebloatPickerDialog(catalog)
+        try:
+            rules = _css_rules(dlg.styleSheet())
+            unchecked = _indicator_geometry(rules["QRadioButton::indicator"])
+            checked_rule = rules["QRadioButton::indicator:checked"]
+            checked = _indicator_geometry(checked_rule, fallback=unchecked)
+            assert checked == unchecked
+        finally:
+            dlg.deleteLater()
+
+
+class TestDialogTooltipStyle:
+    def test_applied_stylesheet_includes_themed_tooltip(self, qapp, catalog):
+        dlg = DebloatPickerDialog(catalog)
+        try:
+            rules = _css_rules(dlg.styleSheet())
+            assert "QToolTip" in rules
+            tooltip = rules["QToolTip"]
+            assert C.SURFACE0 in tooltip
+            assert C.TEXT in tooltip
+            assert C.SURFACE2 in tooltip
+        finally:
+            dlg.deleteLater()
+
+    def test_tooltip_owning_labels_scope_stylesheet_to_object_name(self, qapp, catalog):
+        from PySide6.QtWidgets import QLabel
+
+        dlg = DebloatPickerDialog(catalog)
+        try:
+            owners = [label for label in dlg.findChildren(QLabel) if label.toolTip()]
+            assert owners
+            risk_badges = [label for label in owners if label.text() in {"LOW", "MEDIUM", "HIGH"}]
+            assert risk_badges
+            for label in owners:
+                name = label.objectName()
+                css = label.styleSheet()
+                assert name
+                scoped = f"QLabel#{name}"
+                assert re.search(rf"{re.escape(scoped)}\s*\{{", css)
+                leftover = css.replace(scoped, "")
+                assert "QLabel {" not in leftover
+                assert not re.match(r"\s*(background|color|font-size|padding)\s*:", css)
         finally:
             dlg.deleteLater()
