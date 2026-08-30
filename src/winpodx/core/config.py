@@ -236,6 +236,9 @@ class RDPConfig:
     # sends the full MonitorDefArray, which rdprrap can't handle — kept for
     # diagnosis only (kills RAIL input).
     multimon: str = "span"
+    # Expose removable host media as \\tsclient\media. Default on preserves
+    # existing installs; disable it to keep mounted host drives hidden from the guest.
+    media_drive_enabled: bool = True
 
     def __post_init__(self) -> None:
         self.port = max(1, min(65535, int(self.port)))
@@ -970,6 +973,7 @@ class Config:
                 "extra_flags": self.rdp.extra_flags,
                 "freerdp_source": self.rdp.freerdp_source,
                 "multimon": self.rdp.multimon,
+                "media_drive_enabled": self.rdp.media_drive_enabled,
             },
             "pod": {
                 "backend": self.pod.backend,

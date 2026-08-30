@@ -604,11 +604,11 @@ def build_rdp_command(
         elif _multimon == "multimon":
             cmd.append("/multimon")
 
-    # Share a directory as \\tsclient\media so the guest's USB desktop
-    # shortcut always resolves: the real removable-media base when mounted,
-    # else an empty placeholder (so clicking USB with nothing plugged in
-    # opens an empty folder instead of erroring "invalid address").
-    cmd.append(f"/drive:media,{_media_redirect_base()}")
+    # Share a directory as \\tsclient\media when enabled so the guest's USB
+    # desktop shortcut resolves: the real removable-media base when mounted,
+    # else an empty placeholder. Users can disable this host-data boundary.
+    if cfg.rdp.media_drive_enabled:
+        cmd.append(f"/drive:media,{_media_redirect_base()}")
 
     # #692: a per-app scale override wins over the global cfg value.
     cmd.append(f"/scale:{scale_override if scale_override is not None else cfg.rdp.scale}")

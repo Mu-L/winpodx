@@ -77,6 +77,10 @@ def test_rdp_config_multimon_invalid_falls_back_to_span():
     assert RDPConfig(multimon="bogus").multimon == "span"
 
 
+def test_rdp_config_media_drive_enabled_defaults_true():
+    assert RDPConfig().media_drive_enabled is True
+
+
 def test_pod_config_devices_default_empty():
     from winpodx.core.config import PodConfig
 
@@ -576,6 +580,17 @@ def test_config_save_calls_fsync(tmp_path, monkeypatch):
     path = Config.path()
     assert path.exists()
     assert path.stat().st_size > 0
+
+
+def test_config_save_load_media_drive_disabled_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+
+    cfg = Config()
+    cfg.rdp.media_drive_enabled = False
+    cfg.save()
+
+    loaded = Config.load()
+    assert loaded.rdp.media_drive_enabled is False
 
 
 def test_parse_winapps_conf(tmp_path):
