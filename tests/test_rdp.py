@@ -1757,6 +1757,68 @@ def test_freerdp_version_accepts_major_minor(monkeypatch):
     assert rdp_mod.freerdp_version() == (3, 27, 0)
 
 
+def test_find_freerdp_auto_prefers_current_native(monkeypatch):
+    from winpodx.core import rdp as rdp_mod
+
+    native = ("/usr/bin/xfreerdp3", "xfreerdp")
+    flatpak = (rdp_mod._FLATPAK_FREERDP_CMD, "flatpak")
+    monkeypatch.setattr(rdp_mod, "_FREERDP_CACHE", {})
+    monkeypatch.setattr(rdp_mod, "_find_native_freerdp", lambda: native)
+    monkeypatch.setattr(rdp_mod, "_find_flatpak_freerdp", lambda: flatpak)
+    calls: list[list[str]] = []
+    result = type("Result", (), {"stdout": "FreeRDP version 3.27.0\n", "stderr": ""})()
+
+    def run(cmd, **_kwargs):
+        calls.append(cmd)
+        return result
+
+    monkeypatch.setattr(rdp_mod.subprocess, "run", run)
+
+    assert rdp_mod.find_freerdp() == native
+    assert calls == [["/usr/bin/xfreerdp3", "--version"]]
+
+
+def test_find_freerdp_auto_uses_flatpak_for_old_native(monkeypatch):
+    from winpodx.core import rdp as rdp_mod
+
+    native = ("/usr/bin/xfreerdp3", "xfreerdp")
+    flatpak = (rdp_mod._FLATPAK_FREERDP_CMD, "flatpak")
+    monkeypatch.setattr(rdp_mod, "_FREERDP_CACHE", {})
+    monkeypatch.setattr(rdp_mod, "_find_native_freerdp", lambda: native)
+    monkeypatch.setattr(rdp_mod, "_find_flatpak_freerdp", lambda: flatpak)
+    calls: list[list[str]] = []
+    result = type("Result", (), {"stdout": "FreeRDP version 3.5.1\n", "stderr": ""})()
+
+    def run(cmd, **_kwargs):
+        calls.append(cmd)
+        return result
+
+    monkeypatch.setattr(rdp_mod.subprocess, "run", run)
+
+    assert rdp_mod.find_freerdp() == flatpak
+    assert calls == [["/usr/bin/xfreerdp3", "--version"]]
+
+
+def test_find_freerdp_auto_keeps_old_native_without_flatpak(monkeypatch):
+    from winpodx.core import rdp as rdp_mod
+
+    native = ("/usr/bin/xfreerdp3", "xfreerdp")
+    monkeypatch.setattr(rdp_mod, "_FREERDP_CACHE", {})
+    monkeypatch.setattr(rdp_mod, "_find_native_freerdp", lambda: native)
+    monkeypatch.setattr(rdp_mod, "_find_flatpak_freerdp", lambda: None)
+    calls: list[list[str]] = []
+    result = type("Result", (), {"stdout": "FreeRDP version 3.5.1\n", "stderr": ""})()
+
+    def run(cmd, **_kwargs):
+        calls.append(cmd)
+        return result
+
+    monkeypatch.setattr(rdp_mod.subprocess, "run", run)
+
+    assert rdp_mod.find_freerdp() == native
+    assert calls == [["/usr/bin/xfreerdp3", "--version"]]
+
+
 def test_find_native_freerdp_checks_rail_then_sdl(monkeypatch):
     from winpodx.core import rdp as rdp_mod
 

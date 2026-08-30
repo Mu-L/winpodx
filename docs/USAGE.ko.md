@@ -303,6 +303,7 @@ port = 3390
 scale = 100                  # DE 에서 자동 감지
 dpi = 0                      # Windows DPI % (0 = 자동)
 multimon = "span"            # 멀티모니터 RAIL: span | multimon | off
+freerdp_source = "auto"      # auto = RAIL 호환 native 우선, 아니면 Flatpak; native | flatpak 강제 가능
 extra_flags = ""             # 추가 FreeRDP 플래그 (allowlist); 예:
                              #   "+multitouch" — 터치스크린 / 스타일러스 / 펜을
                              #   Windows 앱에 패스스루 (#623)

@@ -204,27 +204,7 @@ _FREERDP_VERSION_CACHE: object = _UNPROBED
 FREERDP_RAIL_FLOOR = (3, 6, 0)
 
 
-def freerdp_version() -> tuple[int, int, int] | None:
-    """Return the installed FreeRDP version, or ``None`` if undetectable.
-
-    One probe for the whole process, shared by the launcher and ``doctor``:
-    the launcher path must know the major version to pick the right ``/app:``
-    syntax, and doctor reports the full triple. Probing twice meant doctor
-    re-implemented the lookup and got the Flatpak case wrong — ``find_freerdp``
-    can return a whole ``flatpak run … com.freerdp.FreeRDP`` command line, and
-    running that as a single argv element raises ``FileNotFoundError``, so no
-    version was ever detected on Flatpak hosts and the RAIL warning silently
-    never fired.
-    """
-    global _FREERDP_VERSION_CACHE
-    if _FREERDP_VERSION_CACHE is not _UNPROBED:
-        return _FREERDP_VERSION_CACHE  # type: ignore[return-value]
-
-    _FREERDP_VERSION_CACHE = None
-    found = find_freerdp()
-    if found is None:
-        return None
-
+def _probe_freerdp_version(found: tuple[str, str]) -> tuple[int, int, int] | None:
     path, _kind = found
     # The launcher string may be a full command ("flatpak run …"), so split it
     # rather than treating it as one executable path.
@@ -244,10 +224,26 @@ def freerdp_version() -> tuple[int, int, int] | None:
         match = re.search(r"FreeRDP version\s+(\d+)\.(\d+)", blob)
         if match is None:
             return None
-        _FREERDP_VERSION_CACHE = (int(match.group(1)), int(match.group(2)), 0)
+        return (int(match.group(1)), int(match.group(2)), 0)
+
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def freerdp_version() -> tuple[int, int, int] | None:
+    """Return the installed FreeRDP version, or ``None`` if undetectable.
+
+    The result is cached for the whole process and shared by the launcher and
+    ``doctor``. The launcher path must know the major version to pick the right
+    ``/app:`` syntax, and doctor reports the full triple. ``find_freerdp`` can
+    return a whole ``flatpak run … com.freerdp.FreeRDP`` command line, so the
+    shared probe splits launchers before appending ``--version``.
+    """
+    global _FREERDP_VERSION_CACHE
+    if _FREERDP_VERSION_CACHE is not _UNPROBED:
         return _FREERDP_VERSION_CACHE  # type: ignore[return-value]
 
-    _FREERDP_VERSION_CACHE = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    found = find_freerdp()
+    _FREERDP_VERSION_CACHE = None if found is None else _probe_freerdp_version(found)
     return _FREERDP_VERSION_CACHE  # type: ignore[return-value]
 
 
@@ -370,11 +366,9 @@ def find_freerdp(prefer: str = "auto") -> tuple[str, str] | None:
     """Locate a FreeRDP 3+ client, honouring a source preference.
 
     ``prefer``:
-      * ``"auto"`` (default) — **prefer the Flatpak ``com.freerdp.FreeRDP``**,
-        fall back to the native ``xfreerdp`` only when the Flatpak is absent.
-        The Flatpak ships a self-contained FreeRDP 3+ (no host package skew);
-        its earlier RAIL multi-display rough edges are handled by
-        ``cfg.rdp.multimon = "span"`` (see ``build_rdp_command``).
+      * ``"auto"`` (default) — prefer native ``xfreerdp`` when it meets the
+        RAIL version floor, otherwise use the self-contained Flatpak client.
+        An older native client remains the fallback when Flatpak is absent.
       * ``"native"`` — force the native client first, Flatpak only as fallback
         (for hosts where the Flatpak sandbox is a problem).
       * ``"flatpak"`` — force the Flatpak (fall back to native only if the
@@ -392,13 +386,19 @@ def find_freerdp(prefer: str = "auto") -> tuple[str, str] | None:
     if pref == "native":
         # Forced native: try it first, fall back to the Flatpak if absent.
         found = _find_native_freerdp() or _find_flatpak_freerdp()
-    else:
-        # auto + flatpak: prefer the Flatpak client (self-contained FreeRDP 3+,
-        # no host package skew), native only as fallback. The RAIL multi-display
-        # rough edges that previously made native the safer default are handled
-        # by cfg.rdp.multimon = "span" (see build_rdp_command), so the Flatpak
-        # is viable as the preferred client again.
+    elif pref == "flatpak":
         found = _find_flatpak_freerdp() or _find_native_freerdp()
+    else:
+        native = _find_native_freerdp()
+        native_version = (
+            _probe_freerdp_version(native)
+            if native is not None and native[1] == "xfreerdp"
+            else None
+        )
+        if native_version is not None and native_version >= FREERDP_RAIL_FLOOR:
+            found = native
+        else:
+            found = _find_flatpak_freerdp() or native
 
     if found is not None:
         _FREERDP_CACHE[pref] = found
