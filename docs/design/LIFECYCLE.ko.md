@@ -171,7 +171,7 @@ WinPodX pod 의 설치 / 업그레이드 / 마이그레이션 / 헬스 유지 �
 기존 config 있으면 버전 무관 실행:
 
 1. **`_probe_password_sync`** — 사전 FreeRDP auth probe. password 가 drift 됐으면 (cfg vs Windows 계정 불일치) `winpodx pod sync-password` 안내 진단 출력.
-2. **`_ensure_canonical_image_pin`** — 일치 안 하면 `cfg.pod.image` 와 `compose.yaml` 을 `DOCKUR_IMAGE_PIN` 으로 재작성. 다음 `pod start` 시 컨테이너 1회 recreate (volume 보존 — ~30초, ISO 재다운로드 없음). Idempotent: pin 일치 → no-op.
+2. **`_refresh_compose_for_upgrade`** — 저장된 `cfg.pod.image` 를 바꾸지 않고 `compose.yaml` 을 다시 생성. 템플릿이 바뀐 경우 storage volume 을 보존한 채 컨테이너를 recreate.
 3. **`_apply_runtime_fixes_to_existing_guest`** — `apply_windows_runtime_fixes(cfg)` 호출 ([§6](#6-apply-체인-apply_windows_runtime_fixes)).
 
 ### 5.3 cross-version 업그레이드에서만 실행
@@ -301,32 +301,31 @@ host /exec  ──► agent.ps1  ──► Start-Process wscript.exe ...rdprrap-
 
 ## 8. 컨테이너 이미지 pinning
 
-**코드.** `src/winpodx/core/config.py` 의 `DOCKUR_IMAGE_PIN` 상수.
+**코드.** `src/winpodx/core/config.py` 의 `DOCKUR_IMAGE_PIN`, `DOCKUR_IMAGE_ARM_PIN` 상수.
 
 **왜.** Pin 이전 (≤ v0.3.0), `cfg.pod.image` default 가 `:latest`. 매 `podman-compose up` 마다 dockur 가 푸시한 무엇이든에 대해 tag 재해상. digest 가 바뀌면 (자주 — dockur 릴리스 주기가 daily-ish), podman-compose 가 spec 다르다고 판단해서 **컨테이너 재생성** → fresh ISO 다운로드 → 분 단위 Sysprep → 게스트 상태 손실.
 
-**포맷.** `docker.io/dockurr/windows@sha256:<64-char-hex>`.
+**포맷.** `ghcr.io/dockur/windows[-arm]@sha256:<64-char-hex>`.
 
 **갱신 절차 (릴리스 시점).**
 
 ```
-TOKEN=$(curl -sSL "https://auth.docker.io/token?service=registry.docker.io&scope=repository:dockurr/windows:pull" | jq -r .token)
-curl -sSL -H "Authorization: Bearer $TOKEN" -I \
-  -H 'Accept: application/vnd.docker.distribution.manifest.list.v2+json' \
-  -H 'Accept: application/vnd.oci.image.index.v1+json' \
-  "https://registry-1.docker.io/v2/dockurr/windows/manifests/latest" \
-  | grep -i '^docker-content-digest:'
+podman pull ghcr.io/dockur/windows:latest
+podman image inspect ghcr.io/dockur/windows:latest -f '{{json .RepoDigests}}'
+podman pull ghcr.io/dockur/windows-arm:latest
+podman image inspect ghcr.io/dockur/windows-arm:latest -f '{{json .RepoDigests}}'
 ```
 
-digest 를 `DOCKUR_IMAGE_PIN` 에 붙여넣고, 버전 bump, ship.
+각 저장소 digest 를 `DOCKUR_IMAGE_PIN`, `DOCKUR_IMAGE_ARM_PIN` 에 붙여넣고,
+버전 bump 후 ship.
 
-**마이그레이션.** Migrate 의 `_ensure_canonical_image_pin` 이 기존 pod 의 `cfg.pod.image` + `compose.yaml` 재작성. 다음 `pod start` 시 컨테이너 1회 recreate (volume 보존 — ~30초, ISO 재다운로드 없음, Sysprep 없음). Idempotent.
+**마이그레이션.** `_refresh_compose_for_upgrade` 는 Docker Hub pin 및 사설 미러를 포함한 비어 있지 않은 설정 이미지를 보존하면서 `compose.yaml` 을 다시 생성. 렌더링 결과가 바뀐 경우에만 컨테이너 recreate.
 
 **사용자 opt-in 갱신.** `winpodx setup --update-image` 가 fresh `:latest` 를 pull 하는 **유일한** 경로:
 
-1. `podman pull docker.io/dockurr/windows:latest`
+1. `podman pull ghcr.io/dockur/windows:latest` (aarch64 는 `windows-arm`)
 2. `podman image inspect ... -f '{{json .RepoDigests}}'` → digest 해결
-3. docker.io 항목으로 필터 → `cfg.pod.image := <digest>`
+3. 정확한 GHCR 저장소 항목 선택 → `cfg.pod.image := <digest>`
 4. `compose.yaml` 재생성
 5. "다음 pod start 시 컨테이너 recreate ~30초, volume 보존" 출력
 
@@ -530,7 +529,7 @@ Agent listener: `http://+:8765/` + `netsh http add urlacl` 사전 등록 (User-l
 
 **원인 (PR #83 이전).** `image: :latest` 가 podman-compose 에 의해 재해상. dockur 가 마지막 `up` 이후 새 `:latest` push. 새 digest → spec mismatch → recreate.
 
-**해결.** Migrate (PR #83 의 `_ensure_canonical_image_pin`) 가 compose 를 pinned digest 로 재작성. 미래 `:latest` push 가 사용자 안 흔듬.
+**해결.** 신규 설정은 digest pin 을 사용. 기존 `:latest` 사용자는 `winpodx setup --update-image` 를 한 번 실행하면 되고, 이후 migrate 는 해당 pin 을 보존하면서 compose 만 갱신.
 
 ### 14.5 Discovery 가 빈/부분 결과 반환
 

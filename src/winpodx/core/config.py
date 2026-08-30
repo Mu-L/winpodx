@@ -151,10 +151,10 @@ def _validate_device_entry(entry: object) -> str | None:
 # this digest is a deliberate per-release decision (so winpodx ships a
 # specific tested dockur version with each release), not a side effect
 # of dockur pushing a new ``:latest``. ``winpodx setup --update-image``
-# resolves a fresh digest from ``docker.io/dockurr/windows:latest`` for
+# resolves a fresh digest from ``ghcr.io/dockur/windows:latest`` for
 # users who explicitly want to track upstream.
 #
-# Update procedure (release-time): query Docker Hub registry for the
+# Update procedure (release-time): query the official GHCR package for the
 # current ``:latest`` digest, paste below. See ``winpodx setup --update
 # -image`` for the runtime equivalent users invoke explicitly.
 #
@@ -172,28 +172,26 @@ def _validate_device_entry(entry: object) -> str | None:
 # ~16 hours, so #770's root cause was still live in what winpodx shipped.
 # This bump is what actually delivers that fix (#735, #770).
 DOCKUR_IMAGE_PIN = (
-    "docker.io/dockurr/windows@sha256:"
-    "743847e75b776790c059f33ac6654f84727ba36a6d458a61e37cb2b2f043d168"
+    "ghcr.io/dockur/windows@sha256:743847e75b776790c059f33ac6654f84727ba36a6d458a61e37cb2b2f043d168"
 )
 
 # Pinned dockur/windows-arm image — used as the default ``cfg.pod.image``
 # when the host architecture is aarch64. The image runs Windows 11 ARM
 # inside the container; on ARM64 hosts (e.g. Raspberry Pi 5) KVM
 # accelerates the guest natively. The pinned digest is the multi-arch
-# OCI index, so container runtimes pick the right platform manifest
-# (amd64 or arm64) automatically.
+# official GHCR package digest for that release.
 #
 # Left where it is deliberately. ARM is exploratory (#141 phase 4/7 open, #140
 # unresolved): nothing here can boot an ARM guest, so rolling this pin forward
 # four minors would ship an unverified image to the users least able to
 # diagnose it. The VERSIONS.txt baseline tracks upstream separately.
 #
-# As of 2026-06-06 — a 5.16-labelled build of dockur/windows-arm (revision
-# 97861800) on QEMU base 7.32. The comment previously said "v5.15", which the
-# image's own OCI metadata contradicts:
+# As of 2026-06-06 — the official 5.16 dockur/windows-arm release (revision
+# 97861800) on QEMU base 7.32. GHCR uses a different repository digest than
+# the former Docker Hub pin for this release:
 DOCKUR_IMAGE_ARM_PIN = (
-    "docker.io/dockurr/windows-arm@sha256:"
-    "7c28ddbbe69eb02900bef3b7ab3ad60fbd5fb409524a307a60a3c934f80a9dd5"
+    "ghcr.io/dockur/windows-arm@sha256:"
+    "ece93263254567c6cd4ce420b1fff793d2326f4535555bdf592f40ab173a7bed"
 )
 
 
@@ -293,8 +291,8 @@ class PodConfig:
     # rewrites the pin).
     #
     # Default is arch-aware (``_default_pod_image``): x86_64 hosts get
-    # ``dockurr/windows`` (x86_64 Windows guest), aarch64 hosts get
-    # ``dockurr/windows-arm`` (Windows-on-ARM guest). The picker only
+    # ``ghcr.io/dockur/windows`` (x86_64 Windows guest), aarch64 hosts get
+    # ``ghcr.io/dockur/windows-arm`` (Windows-on-ARM guest). The picker only
     # fires for fresh installs — existing ``winpodx.toml`` files have
     # an explicit ``image`` line and round-trip unchanged.
     image: str = field(default_factory=_default_pod_image)

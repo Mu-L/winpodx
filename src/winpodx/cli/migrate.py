@@ -37,11 +37,10 @@ _MARKER_VERSION_RE = re.compile(r"^\d+(\.\d+){0,3}[a-zA-Z0-9.+_-]*$")
 # note user-facing, not developer-facing — three to six bullets max.
 _VERSION_NOTES: dict[str, list[str]] = {
     "0.4.0": [
-        "Container image is now SHA-pinned. dockur's :latest push cadence no "
-        "longer triggers unsolicited container recreates -- updates are opt-in "
-        "via `winpodx setup --update-image`. Migrate auto-aligns existing pods "
-        "on upgrade (one ~30s recreate on next pod start, volume preserved -- "
-        "no ISO redownload).",
+        "Fresh installs now use a SHA-pinned container image, so dockur's "
+        ":latest pushes cannot trigger unsolicited recreates. Existing image "
+        "values are preserved; run `winpodx setup --update-image` once to replace "
+        "an older :latest value with an official digest pin.",
         "No more PowerShell console flashes anywhere. The WinpodxAgent "
         "HKCU\\Run entry wrapped under wscript+"
         "hidden-launcher.vbs; legacy flashing fallbacks removed; install.bat "
@@ -231,7 +230,7 @@ def run_migrate(args: argparse.Namespace) -> int:
         # rather than letting them watch all three applies fail in confusing
         # ways.
         _probe_password_sync(non_interactive)
-        _ensure_canonical_image_pin(non_interactive)
+        _refresh_compose_for_upgrade()
         _apply_runtime_fixes_to_existing_guest(non_interactive, verbose=verbose)
         _maybe_auto_migrate_storage(non_interactive)
         # Repopulate the app menu if it was wiped. A non-purge uninstall removes
@@ -281,7 +280,7 @@ def run_migrate(args: argparse.Namespace) -> int:
     # crossing 0.3.0 -> 0.3.x or any future version get newly-added
     # fixes on the existing guest without having to recreate the
     # container.
-    _ensure_canonical_image_pin(non_interactive)
+    _refresh_compose_for_upgrade()
     _apply_runtime_fixes_to_existing_guest(non_interactive, verbose=verbose)
     _maybe_auto_migrate_storage(non_interactive)
 
@@ -673,57 +672,15 @@ def _probe_password_sync(non_interactive: bool) -> None:
         print("  Password sync OK.")
 
 
-def _ensure_canonical_image_pin(non_interactive: bool) -> None:
-    """Align the existing pod's image with what a fresh install would
-    write — i.e., the packaged ``DOCKUR_IMAGE_PIN``.
-
-    Pre-this-step, ``cfg.pod.image`` was persisted at first setup
-    (``ghcr.io/dockur/windows:latest`` for installs ≤ v0.3.0, since
-    PR #62 the docker.io variant), and ``install.sh --main`` left it
-    untouched on subsequent upgrades. With ``:latest``, every
-    ``podman-compose up`` re-resolved the tag against whatever dockur
-    had pushed since — when the resolved digest changed (frequently,
-    since dockur's release cadence is daily-ish), podman-compose
-    treated the spec as different and *recreated the container*. The
-    user's session reported on 2026-05-02 caught dockur mid-bug
-    (proc.sh line 137 substring failure) on a fresh ``:latest`` push,
-    surfacing as a multi-minute "fresh install" cycle from a working
-    pod that had nothing wrong with it.
-
-    Migration semantics: ``winpodx migrate`` should leave the pod in
-    the state a *fresh main install would produce*. That means
-    ``cfg.pod.image == DOCKUR_IMAGE_PIN``. We rewrite both the
-    persisted config and ``compose.yaml`` so the next ``pod start``
-    sees the canonical pin.
-
-    Cost: one container recreate on the next ``pod start``. The
-    storage volume (``winpodx_winpodx-data``) persists across
-    recreates, so dockur's first-boot install marker still exists in
-    the volume — no Sysprep, no ISO redownload, ~30 s downtime.
-    Idempotent: re-running migrate on an already-pinned config is a
-    no-op (string equality check returns False before any rewrite).
-    """
-    from winpodx.core.config import Config, _default_pod_image
+def _refresh_compose_for_upgrade() -> None:
+    from winpodx.core.config import Config
 
     cfg = Config.load()
     if cfg.pod.backend not in ("podman", "docker"):
         return  # the manual backend doesn't use the dockur image / compose
 
-    # Architecture-aware, like a fresh install: aarch64 hosts get the ARM pin.
-    # This used to hard-code DOCKUR_IMAGE_PIN, so every migrate on an ARM host
-    # silently rewrote the config to the x86 image.
-    canonical_pin = _default_pod_image()
-    pin_changed = cfg.pod.image != canonical_pin
-    if pin_changed:
-        print("\nAligning container image with this WinPodX version...")
-        print(f"  was: {cfg.pod.image}")
-        print(f"  now: {canonical_pin}")
-        cfg.pod.image = canonical_pin
-        cfg.save()
-
-    # Always regenerate compose.yaml on upgrade — NOT just when the image pin
-    # changed. compose-template features that land in a release without a pin
-    # bump (e.g. the live-USB infra #286, or the bare-metal disguise #246's
+    # Always regenerate compose.yaml on upgrade. Compose-template features that
+    # land in a release (e.g. live-USB infra #286 or bare-metal disguise #246's
     # CPU_FLAGS / -smbios) must reach an existing guest too. Snapshot the old
     # rendering first so we can tell whether anything actually changed.
     from winpodx.utils.paths import config_dir
@@ -748,7 +705,7 @@ def _ensure_canonical_image_pin(non_interactive: bool) -> None:
     if new_compose == old_compose:
         return  # nothing changed — no recreate, no noise
 
-    # compose.yaml changed (image pin and/or a compose-template feature). The
+    # compose.yaml changed because a compose-template feature changed. The
     # container keeps its OLD spec/QEMU command line until it is recreated, so
     # an update that changed compose must recreate to actually apply it — even
     # if the pod is currently stopped. Deferring the stopped case to "next pod

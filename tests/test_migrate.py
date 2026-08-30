@@ -353,7 +353,7 @@ def _stub_guest_apply(monkeypatch) -> None:
     """
     for name in (
         "_probe_password_sync",
-        "_ensure_canonical_image_pin",
+        "_refresh_compose_for_upgrade",
         "_apply_runtime_fixes_to_existing_guest",
         "_maybe_auto_migrate_storage",
     ):
@@ -928,10 +928,10 @@ class TestMaybeAutoMigrateStorage:
         assert "winpodx setup --migrate-storage" in out
 
 
-# --- _ensure_canonical_image_pin: recreate on compose change ---
+# --- _refresh_compose_for_upgrade: recreate on compose change ---
 
 
-def _pin_cfg():
+def _compose_cfg():
     from winpodx.core.config import DOCKUR_IMAGE_PIN
 
     cfg = MagicMock()
@@ -940,14 +940,14 @@ def _pin_cfg():
     return cfg
 
 
-def test_canonical_pin_recreates_when_compose_changed_and_running(tmp_path):
-    from winpodx.cli.migrate import _ensure_canonical_image_pin
+def test_compose_refresh_recreates_when_content_changed(tmp_path):
+    from winpodx.cli.migrate import _refresh_compose_for_upgrade
     from winpodx.core.pod import PodState
 
     compose = tmp_path / "compose.yaml"
     compose.write_text("OLD", encoding="utf-8")
     with (
-        patch("winpodx.core.config.Config.load", return_value=_pin_cfg()),
+        patch("winpodx.core.config.Config.load", return_value=_compose_cfg()),
         patch("winpodx.utils.paths.config_dir", return_value=tmp_path),
         patch(
             "winpodx.core.compose.generate_compose",
@@ -957,19 +957,19 @@ def test_canonical_pin_recreates_when_compose_changed_and_running(tmp_path):
         patch("winpodx.core.pod.stop_pod") as stop,
         patch("winpodx.core.pod.start_pod") as start,
     ):
-        _ensure_canonical_image_pin(non_interactive=True)
+        _refresh_compose_for_upgrade()
     stop.assert_called_once()
     start.assert_called_once()
 
 
-def test_canonical_pin_no_recreate_when_compose_unchanged(tmp_path):
-    from winpodx.cli.migrate import _ensure_canonical_image_pin
+def test_compose_refresh_skips_recreate_when_content_unchanged(tmp_path):
+    from winpodx.cli.migrate import _refresh_compose_for_upgrade
     from winpodx.core.pod import PodState
 
     compose = tmp_path / "compose.yaml"
     compose.write_text("SAME", encoding="utf-8")
     with (
-        patch("winpodx.core.config.Config.load", return_value=_pin_cfg()),
+        patch("winpodx.core.config.Config.load", return_value=_compose_cfg()),
         patch("winpodx.utils.paths.config_dir", return_value=tmp_path),
         patch(
             "winpodx.core.compose.generate_compose",
@@ -979,58 +979,59 @@ def test_canonical_pin_no_recreate_when_compose_unchanged(tmp_path):
         patch("winpodx.core.pod.stop_pod") as stop,
         patch("winpodx.core.pod.start_pod") as start,
     ):
-        _ensure_canonical_image_pin(non_interactive=True)
+        _refresh_compose_for_upgrade()
     stop.assert_not_called()
     start.assert_not_called()
 
 
-def test_canonical_pin_is_architecture_aware(tmp_path):
-    """On aarch64 the canonical pin is the ARM image. This used to hard-code
-    DOCKUR_IMAGE_PIN, so every migrate on an ARM host silently rewrote the
-    config to the x86 image."""
-    from winpodx.cli.migrate import _ensure_canonical_image_pin
-    from winpodx.core.config import DOCKUR_IMAGE_ARM_PIN
-    from winpodx.core.pod import PodState
+def test_compose_refresh_preserves_existing_arm_image(tmp_path):
+    from winpodx.cli.migrate import _refresh_compose_for_upgrade
 
     compose = tmp_path / "compose.yaml"
-    compose.write_text("OLD", encoding="utf-8")
+    compose.write_text("SAME", encoding="utf-8")
     cfg = MagicMock()
     cfg.pod.backend = "podman"
-    cfg.pod.image = "docker.io/dockurr/windows@sha256:something-stale"
+    existing_image = "docker.io/dockurr/windows-arm@sha256:existing"
+    cfg.pod.image = existing_image
 
     with (
         patch("winpodx.core.config.Config.load", return_value=cfg),
         patch("platform.machine", return_value="aarch64"),
         patch("winpodx.utils.paths.config_dir", return_value=tmp_path),
-        patch("winpodx.core.compose.generate_compose"),
-        patch("winpodx.core.pod.pod_status", return_value=MagicMock(state=PodState.STOPPED)),
+        patch(
+            "winpodx.core.compose.generate_compose",
+            side_effect=lambda c: compose.write_text("SAME", encoding="utf-8"),
+        ),
     ):
-        _ensure_canonical_image_pin(non_interactive=True)
+        _refresh_compose_for_upgrade()
 
-    assert cfg.pod.image == DOCKUR_IMAGE_ARM_PIN
+    assert cfg.pod.image == existing_image
+    cfg.save.assert_not_called()
 
 
-def test_canonical_pin_uses_x86_image_on_x86(tmp_path):
-    from winpodx.cli.migrate import _ensure_canonical_image_pin
-    from winpodx.core.config import DOCKUR_IMAGE_PIN
-    from winpodx.core.pod import PodState
+def test_compose_refresh_preserves_custom_x86_image(tmp_path):
+    from winpodx.cli.migrate import _refresh_compose_for_upgrade
 
     compose = tmp_path / "compose.yaml"
-    compose.write_text("OLD", encoding="utf-8")
+    compose.write_text("SAME", encoding="utf-8")
     cfg = MagicMock()
     cfg.pod.backend = "podman"
-    cfg.pod.image = "docker.io/dockurr/windows@sha256:something-stale"
+    existing_image = "registry.example/windows@sha256:custom"
+    cfg.pod.image = existing_image
 
     with (
         patch("winpodx.core.config.Config.load", return_value=cfg),
         patch("platform.machine", return_value="x86_64"),
         patch("winpodx.utils.paths.config_dir", return_value=tmp_path),
-        patch("winpodx.core.compose.generate_compose"),
-        patch("winpodx.core.pod.pod_status", return_value=MagicMock(state=PodState.STOPPED)),
+        patch(
+            "winpodx.core.compose.generate_compose",
+            side_effect=lambda c: compose.write_text("SAME", encoding="utf-8"),
+        ),
     ):
-        _ensure_canonical_image_pin(non_interactive=True)
+        _refresh_compose_for_upgrade()
 
-    assert cfg.pod.image == DOCKUR_IMAGE_PIN
+    assert cfg.pod.image == existing_image
+    cfg.save.assert_not_called()
 
 
 def test_whats_new_selects_and_orders_every_release_in_range(monkeypatch, capsys):

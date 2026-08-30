@@ -83,6 +83,30 @@ def _cfg() -> Config:
     return cfg
 
 
+def test_compose_uses_ghcr_default_image_on_x86_64(monkeypatch):
+    monkeypatch.setattr(_compose_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(_config_module.platform, "machine", lambda: "x86_64")
+
+    content = _build_compose_content(_cfg())
+
+    assert (
+        "image: ghcr.io/dockur/windows@sha256:"
+        "743847e75b776790c059f33ac6654f84727ba36a6d458a61e37cb2b2f043d168"
+    ) in content
+
+
+def test_compose_uses_ghcr_default_image_on_aarch64(monkeypatch):
+    monkeypatch.setattr(_compose_module.platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(_config_module.platform, "machine", lambda: "aarch64")
+
+    content = _build_compose_content(_cfg())
+
+    assert (
+        "image: ghcr.io/dockur/windows-arm@sha256:"
+        "ece93263254567c6cd4ce420b1fff793d2326f4535555bdf592f40ab173a7bed"
+    ) in content
+
+
 def test_compose_cpu_flags_x86_64(monkeypatch):
     """x86_64 hosts emit ``arch_capabilities=off`` via CPU_FLAGS env."""
     monkeypatch.setattr(_compose_module.platform, "machine", lambda: "x86_64")

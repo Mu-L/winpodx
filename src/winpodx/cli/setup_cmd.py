@@ -92,7 +92,7 @@ def _ask(prompt: str, default: str = "") -> str:
 
 
 def _update_image_pin() -> int:
-    """Pull docker.io/dockurr/windows:latest, resolve its digest, pin
+    """Pull the architecture's official GHCR image, resolve its digest, pin
     cfg.pod.image to it, and regenerate compose.yaml. Returns the
     process exit code (0 on success, non-zero on failure).
 
@@ -127,9 +127,10 @@ def _update_image_pin() -> int:
     import platform as _platform
 
     if _platform.machine() == "aarch64":
-        upstream_tag = "docker.io/dockurr/windows-arm:latest"
+        upstream_repo = "ghcr.io/dockur/windows-arm"
     else:
-        upstream_tag = "docker.io/dockurr/windows:latest"
+        upstream_repo = "ghcr.io/dockur/windows"
+    upstream_tag = f"{upstream_repo}:latest"
 
     print(tr("Pulling {tag}...").format(tag=upstream_tag))
     try:
@@ -142,8 +143,8 @@ def _update_image_pin() -> int:
         return 3
 
     # Resolve the now-local image's repo-digest. RepoDigests is a list
-    # of `<repo>@sha256:...` references — we filter to the docker.io
-    # one so the pin always uses the canonical registry path.
+    # of `<repo>@sha256:...` references — select only the exact GHCR
+    # repository so an alias from another registry cannot become the pin.
     print(tr("Resolving image digest..."))
     try:
         result = subprocess.run(
@@ -173,10 +174,15 @@ def _update_image_pin() -> int:
         digests = json.loads(result.stdout.strip()) or []
     except json.JSONDecodeError:
         digests = []
-    pinned = next((d for d in digests if d.startswith("docker.io/")), None)
-    if not pinned and digests:
-        pinned = digests[0]
-    if not pinned or "@sha256:" not in pinned:
+    pinned = next(
+        (
+            digest
+            for digest in digests
+            if isinstance(digest, str) and digest.startswith(f"{upstream_repo}@sha256:")
+        ),
+        None,
+    )
+    if not pinned:
         print(tr("FAIL: no usable digest in RepoDigests={digests}").format(digests=repr(digests)))
         return 3
 

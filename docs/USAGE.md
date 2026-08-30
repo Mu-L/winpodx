@@ -317,7 +317,7 @@ auto_start = false                               # Opt-in login auto-start: tray
 idle_timeout = 0                                 # Seconds before auto-suspend (0 = disabled)
 idle_action = "pause"                            # pause = free CPU / keep RAM; stop = free RAM / cold boot next launch
 boot_timeout = 300                               # Seconds to wait for first-boot unattended install
-image = "docker.io/dockurr/windows@sha256:..."   # Release-pinned image (override for an air-gapped mirror)
+image = "ghcr.io/dockur/windows@sha256:..."      # Release-pinned official image (override for an air-gapped mirror)
 usb_live = true                                  # Legacy compatibility key; live USB now uses usbredir — see `winpodx device`
 # disguise_level = "balanced"                    # Bare-metal mode: off | balanced (default, free hiding) | max (Hyper-V off, slower) — Nvidia code-43 / VM-hostile apps; not an anti-cheat bypass (#246)
 home_share = ""                                  # Empty = whole Home; otherwise expose only this directory as \\tsclient\home
@@ -347,3 +347,5 @@ level = "INFO"                                   # DEBUG | INFO | WARNING | ERRO
 ```
 
 Edit via `winpodx config set <key> <value>` or directly with your editor — TOML is parsed via the stdlib on Python 3.11+ (`tomli` on 3.9/3.10).
+
+Fresh aarch64 setups use the matching `ghcr.io/dockur/windows-arm@sha256:...` package. A non-empty `pod.image` is preserved across upgrades, including Docker Hub pins and private mirrors; run `winpodx setup --update-image` only when you explicitly want the latest official GHCR image.

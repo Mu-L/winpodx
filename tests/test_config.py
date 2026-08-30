@@ -5,6 +5,28 @@ from winpodx.core.config import Config, PodConfig, RDPConfig
 from winpodx.utils.compat import parse_winapps_conf
 
 
+def test_config_default_image_uses_ghcr_on_x86_64(monkeypatch):
+    import winpodx.core.config as config_module
+
+    monkeypatch.setattr(config_module.platform, "machine", lambda: "x86_64")
+
+    assert Config().pod.image == (
+        "ghcr.io/dockur/windows@sha256:"
+        "743847e75b776790c059f33ac6654f84727ba36a6d458a61e37cb2b2f043d168"
+    )
+
+
+def test_config_default_image_uses_ghcr_on_aarch64(monkeypatch):
+    import winpodx.core.config as config_module
+
+    monkeypatch.setattr(config_module.platform, "machine", lambda: "aarch64")
+
+    assert Config().pod.image == (
+        "ghcr.io/dockur/windows-arm@sha256:"
+        "ece93263254567c6cd4ce420b1fff793d2326f4535555bdf592f40ab173a7bed"
+    )
+
+
 def test_config_defaults():
     cfg = Config()
     assert cfg.rdp.ip == "127.0.0.1"
@@ -305,6 +327,20 @@ def test_config_save_load(tmp_path, monkeypatch):
     assert loaded.rdp.user == "testuser"
     assert loaded.rdp.ip == "192.168.1.100"
     assert loaded.pod.backend == "docker"
+
+
+def test_config_save_load_preserves_explicit_image(tmp_path, monkeypatch):
+    import winpodx.core.config as config_module
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr(config_module.platform, "machine", lambda: "aarch64")
+    explicit_image = "docker.io/dockurr/windows@sha256:user-selected"
+
+    cfg = Config()
+    cfg.pod.image = explicit_image
+    cfg.save()
+
+    assert Config.load().pod.image == explicit_image
 
 
 def test_config_load_libvirt_backend_migrates_to_podman(tmp_path, monkeypatch):
