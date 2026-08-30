@@ -19,6 +19,7 @@ dpi = 0                   # 0 = let Windows decide; 100–300 = explicit Windows
 extra_flags = ""          # extra xfreerdp flags (validated against an allowlist)
 freerdp_source = "auto"   # auto | native | flatpak
 multimon = "span"         # span | off | multimon — multi-monitor RAIL strategy
+media_drive_enabled = true # false = do not expose host removable media as \\tsclient\media
 
 [pod]
 backend = "podman"        # podman | docker | manual  (libvirt was dropped in 0.6.0)
