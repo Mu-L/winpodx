@@ -171,10 +171,9 @@ class DebloatPickerDialog(QDialog):
 
         self._custom_button = QRadioButton(tr("Custom"))
         # ``Custom`` isn't a real catalog preset -- it just disables the
-        # seed-from-preset behaviour. We do NOT connect its toggled
-        # signal because flipping to Custom should leave the current
-        # checkbox state alone; the only path that lands on Custom is
-        # the user toggling a checkbox, which we drive directly.
+        # seed-from-preset behaviour. Connect toggled only to refresh the
+        # description; never reseed checkboxes.
+        self._custom_button.toggled.connect(self._on_custom_toggled)
         self._preset_group.addButton(self._custom_button)
         preset_row.addWidget(self._custom_button)
         preset_row.addStretch()
@@ -207,27 +206,32 @@ class DebloatPickerDialog(QDialog):
             row.addWidget(box)
 
             badge = QLabel(item.risk.upper())
+            badge.setObjectName("riskBadge")
             badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
             badge.setFixedWidth(60)
             badge.setToolTip(_RISK_TOOLTIP.get(item.risk, ""))
             badge.setStyleSheet(
-                f"background: {_RISK_COLOR.get(item.risk, '#888')};"
+                "QLabel#riskBadge {"
+                f" background: {_RISK_COLOR.get(item.risk, '#888')};"
                 f" color: {C.CRUST}; border-radius: 6px;"
                 " padding: 2px 4px; font-size: 11px; font-weight: 500;"
+                " }"
             )
             row.addWidget(badge)
 
             label = QLabel(item.label)
+            label.setObjectName("itemLabel")
             # Full purpose on hover so every item is explainable even when the
             # short label can't carry it.
             label.setToolTip(item.description)
-            label.setStyleSheet(f"font-size: 13px; color: {C.TEXT};")
+            label.setStyleSheet(f"QLabel#itemLabel {{ font-size: 13px; color: {C.TEXT}; }}")
             row.addWidget(label, 1)
 
             one_way = QLabel(tr("(one-way)")) if not item.is_reversible else QLabel("")
+            one_way.setObjectName("oneWayLabel")
             if not item.is_reversible:
                 one_way.setToolTip(tr("Cannot be undone — this item has no reverse script."))
-            one_way.setStyleSheet(f"color: {C.OVERLAY0}; font-size: 11px;")
+            one_way.setStyleSheet(f"QLabel#oneWayLabel {{ color: {C.OVERLAY0}; font-size: 11px; }}")
             row.addWidget(one_way)
 
             items_layout.addLayout(row)
@@ -284,6 +288,11 @@ class DebloatPickerDialog(QDialog):
                 self._update_preset_desc(preset_name)
                 break
 
+    def _on_custom_toggled(self, checked: bool) -> None:
+        if not checked or self._suppress_recompute:
+            return
+        self._update_preset_desc("custom")
+
     def _update_preset_desc(self, preset_name: str) -> None:
         """Refresh the plain-language description for the active preset."""
         desc = _PRESET_DESCRIPTIONS.get(preset_name.lower())
@@ -311,9 +320,8 @@ class DebloatPickerDialog(QDialog):
         if self._suppress_recompute:
             return
         # User edited the selection directly -> we're no longer on a
-        # named preset. Flip radio to Custom; the radio's signal is
-        # not connected for Custom so this won't recursively mutate
-        # checkboxes.
+        # named preset. Flip radio to Custom under suppress so the
+        # Custom handler only refreshes the description.
         if not self._custom_button.isChecked():
             self._suppress_recompute = True
             try:

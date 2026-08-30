@@ -574,7 +574,7 @@ RADIO = f"""
         background: {C.MANTLE};
     }}
     QRadioButton::indicator:checked {{
-        border: 4px solid {C.BLUE};
+        border: 1px solid {C.BLUE};
         background: {C.CRUST};
     }}
 """
@@ -683,6 +683,14 @@ DIALOG = f"""
     QLabel {{
         background: transparent;
         color: {C.TEXT};
+    }}
+    QToolTip {{
+        background: {C.SURFACE0};
+        color: {C.TEXT};
+        border: 1px solid {C.SURFACE2};
+        border-radius: {RADIUS_S}px;
+        padding: 6px 8px;
+        font-size: {FONT_CAPTION}px;
     }}
 """
 
