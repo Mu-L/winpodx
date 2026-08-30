@@ -300,7 +300,7 @@ port = 3390
 scale = 100                  # Auto-detected from your DE
 dpi = 0                      # Windows DPI % (0 = auto)
 multimon = "span"            # Multi-monitor RAIL: span | multimon | off
-freerdp_source = "auto"      # auto | native | flatpak
+freerdp_source = "auto"      # auto = RAIL-ready native, otherwise Flatpak; force native | flatpak
 extra_flags = ""             # Additional FreeRDP flags (allowlisted); e.g.
                              #   "+multitouch" — touchscreen / stylus / pen
                              #   passthrough into Windows apps (#623)
