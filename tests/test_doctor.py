@@ -470,21 +470,26 @@ class TestMissingDesktopEntryFixer:
         missing = doctor._apps_missing_desktop_entries()
         assert [a.name for a in missing] == ["alpha"]  # hidden one skipped
 
-    def test_fix_reregisters(self, monkeypatch):
+    def test_fix_reregisters_without_registering_mime_types(self, monkeypatch):
         apps = [_FakeApp("beta", mime_types=["text/plain"])]
         monkeypatch.setattr("winpodx.core.app.list_available_apps", lambda: apps)
         monkeypatch.setattr(doctor, "_desktop_entry_path", lambda app: _ExistsPath(False))
         monkeypatch.setattr(doctor, "_desktop_shortcut_missing", lambda: False)
         installed = []
+        mime_registered = []
         monkeypatch.setattr(
             "winpodx.desktop.entry.install_desktop_entry",
             lambda app: installed.append(app.name),
         )
-        monkeypatch.setattr("winpodx.desktop.mime.register_mime_types", lambda app: None)
+        monkeypatch.setattr(
+            "winpodx.desktop.mime.register_mime_types",
+            lambda app: mime_registered.append(app.name),
+        )
         monkeypatch.setattr("winpodx.desktop.icons.update_icon_cache", lambda: None)
         ok, msg = doctor._fix_missing_desktop_entries()
         assert ok
         assert installed == ["beta"]
+        assert mime_registered == []
         assert "re-registered 1" in msg
 
     def test_fix_noop_when_all_present(self, monkeypatch):

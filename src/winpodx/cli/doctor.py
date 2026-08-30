@@ -909,10 +909,10 @@ def _fix_missing_desktop_entries() -> tuple[bool, str]:
     re-install the "Windows Desktop" launcher shortcut (#769) if it's
     missing too. Host-only.
 
-    Reuses the existing desktop-entry install path
-    (``desktop.entry.install_desktop_entry`` + icon + MIME), the same one
-    ``winpodx app install`` and refresh's ``_register_desktop_entries`` use.
-    Each install is idempotent (it overwrites the entry + icon in place), so
+    Reuses the existing desktop-entry install path, which restores the entry,
+    icon, and ``Open with`` candidates without selecting a host default.
+    Explicit default registration remains opt-in through
+    ``winpodx app install <name> --mime``. Each install is idempotent, so
     re-running against an already-installed app is harmless.
     """
     try:
@@ -929,15 +929,12 @@ def _fix_missing_desktop_entries() -> tuple[bool, str]:
 
     from winpodx.desktop.entry import install_desktop_entry, install_desktop_shortcut
     from winpodx.desktop.icons import update_icon_cache
-    from winpodx.desktop.mime import register_mime_types
 
     registered = 0
     failed: list[str] = []
     for app in missing + stale:
         try:
             install_desktop_entry(app)
-            if app.mime_types:
-                register_mime_types(app)
             registered += 1
         except Exception as e:  # noqa: BLE001
             failed.append(f"{app.name} ({e})")
