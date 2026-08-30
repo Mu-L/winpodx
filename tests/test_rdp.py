@@ -600,6 +600,34 @@ class TestBuildRdpCommand:
         assert "/sound:sys:alsa" in cmd
         assert "/exec:evil" not in cmd
 
+    def test_media_drive_enabled_by_default(self, cfg, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "winpodx.core.rdp.find_freerdp",
+            lambda *a, **k: ("/usr/bin/xfreerdp3", "xfreerdp"),
+        )
+        media_base = tmp_path / "media"
+        monkeypatch.setattr("winpodx.core.rdp._media_redirect_base", lambda: media_base)
+
+        cmd, _ = build_rdp_command(cfg)
+
+        assert f"/drive:media,{media_base}" in cmd
+
+    def test_media_drive_disabled_omits_share_without_resolving_base(self, cfg, monkeypatch):
+        monkeypatch.setattr(
+            "winpodx.core.rdp.find_freerdp",
+            lambda *a, **k: ("/usr/bin/xfreerdp3", "xfreerdp"),
+        )
+
+        def unexpected_media_base():
+            raise AssertionError("disabled media redirection must not resolve a host path")
+
+        monkeypatch.setattr("winpodx.core.rdp._media_redirect_base", unexpected_media_base)
+        cfg.rdp.media_drive_enabled = False
+
+        cmd, _ = build_rdp_command(cfg)
+
+        assert not any(arg.startswith("/drive:media,") for arg in cmd)
+
     def test_home_share_empty_uses_home_drive(self, cfg, monkeypatch):
         # #758 default: empty home_share keeps the whole $HOME via +home-drive,
         # with NO explicit /drive:home,<path> — byte-for-byte the old behaviour.
