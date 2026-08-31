@@ -91,7 +91,7 @@ def test_compose_uses_ghcr_default_image_on_x86_64(monkeypatch):
 
     assert (
         "image: ghcr.io/dockur/windows@sha256:"
-        "743847e75b776790c059f33ac6654f84727ba36a6d458a61e37cb2b2f043d168"
+        "32cc92715a6c5dc1f63142d3be11059279d64d0faa7519618a07290b3076f9f2"
     ) in content
 
 
@@ -103,7 +103,7 @@ def test_compose_uses_ghcr_default_image_on_aarch64(monkeypatch):
 
     assert (
         "image: ghcr.io/dockur/windows-arm@sha256:"
-        "ece93263254567c6cd4ce420b1fff793d2326f4535555bdf592f40ab173a7bed"
+        "3ee04afa6011bfd27d407ab25d54f1b1f37f412927a4145cbca3fc28fd5f9c7a"
     ) in content
 
 
