@@ -158,21 +158,13 @@ def _validate_device_entry(entry: object) -> str | None:
 # current ``:latest`` digest, paste below. See ``winpodx setup --update
 # -image`` for the runtime equivalent users invoke explicitly.
 #
-# As of 2026-07-27: the dockur/windows v6.03 release build (dockur revision
-# f6fcb469, QEMU base v7.40). The v6.02 and v6.03 tags point at the same
-# commit — v6.03 is a re-tag — so the version label is cosmetic between them.
-#
-# What matters is that the PREVIOUS pin (sha256:8cc6f8bc…) was not the v6.02
-# release build at all: it was a rolling master build created 2026-07-17
-# 21:26 UTC on QEMU base 7.37. kroese's rootless fix — an OUTPUT-chain DNAT
-# rule so podman's rootlessport, which dials the published port from inside
-# the container's netns and therefore misses PREROUTING, still reaches the
-# guest — landed in the QEMU base at 2026-07-18 13:16 UTC (qemus/qemu
-# ceed7b05c8, first shipped in base v7.37). The old pin predates it by
-# ~16 hours, so #770's root cause was still live in what winpodx shipped.
-# This bump is what actually delivers that fix (#735, #770).
+# dockur/windows v6.05 x86_64 child manifest (revision
+# efe47da76d49c9d77c0a26799c70315fa4d91055), selected from GHCR index:
+# sha256:0cff9eb0e7aee9953e55bc682852ca4fdca233145a58ae1ec94f0b0c01a2ed30
+# Pinning the child manifest keeps the runtime architecture explicit while #843
+# tracks hardware qualification.
 DOCKUR_IMAGE_PIN = (
-    "ghcr.io/dockur/windows@sha256:743847e75b776790c059f33ac6654f84727ba36a6d458a61e37cb2b2f043d168"
+    "ghcr.io/dockur/windows@sha256:32cc92715a6c5dc1f63142d3be11059279d64d0faa7519618a07290b3076f9f2"
 )
 
 # Pinned dockur/windows-arm image — used as the default ``cfg.pod.image``
@@ -181,17 +173,14 @@ DOCKUR_IMAGE_PIN = (
 # accelerates the guest natively. The pinned digest is the multi-arch
 # official GHCR package digest for that release.
 #
-# Left where it is deliberately. ARM is exploratory (#141 phase 4/7 open, #140
-# unresolved): nothing here can boot an ARM guest, so rolling this pin forward
-# four minors would ship an unverified image to the users least able to
-# diagnose it. The VERSIONS.txt baseline tracks upstream separately.
-#
-# As of 2026-06-06 — the official 5.16 dockur/windows-arm release (revision
-# 97861800) on QEMU base 7.32. GHCR uses a different repository digest than
-# the former Docker Hub pin for this release:
+# dockur/windows-arm v6.05 arm64 child manifest (revision
+# c2b1eab95291cab519d9f2bcb00cc55dae4cbed1), selected from GHCR index:
+# sha256:746e7d94228e10c404a06bb1b0c7f972b953b1e706243bd371dc05b7cc4b8864
+# Pinning the child manifest keeps the runtime architecture explicit while #844
+# tracks hardware qualification.
 DOCKUR_IMAGE_ARM_PIN = (
     "ghcr.io/dockur/windows-arm@sha256:"
-    "ece93263254567c6cd4ce420b1fff793d2326f4535555bdf592f40ab173a7bed"
+    "3ee04afa6011bfd27d407ab25d54f1b1f37f412927a4145cbca3fc28fd5f9c7a"
 )
 
 
