@@ -108,9 +108,34 @@ def test_compose_uses_ghcr_default_image_on_aarch64(monkeypatch):
 
 
 def test_compose_cpu_flags_x86_64(monkeypatch):
-    """x86_64 hosts emit ``arch_capabilities=off`` via CPU_FLAGS env."""
+    """x86_64 hosts emit ``arch_capabilities=off`` via CPU_FLAGS env.
+
+    ``tuning_profile = "off"`` (set by ``_cfg()``) alone no longer fully
+    isolates this from the real host's TSC capability: the invtsc
+    "-invtsc" override (added to counter dockur's own independent
+    tsc_scale/tsc_scaling-based +invtsc) applies whenever ``cap.invtsc``
+    is False, regardless of tuning_profile -- that override is a safety
+    fix, not a performance tuning, so it can't be gated on user
+    preference. Mock the capability to an invtsc-True host explicitly so
+    this test only exercises the arch-detection branch.
+    """
+    import winpodx.utils.specs as specs
+
     monkeypatch.setattr(_compose_module.platform, "machine", lambda: "x86_64")
     monkeypatch.setattr(_config_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(
+        specs,
+        "detect_tuning_capability",
+        lambda *, vm_cpu_cores, vm_ram_gb: specs.TuningCapability(
+            invtsc=True,
+            io_uring=True,
+            hugepages_enabled=False,
+            dedicated_host=False,
+            kernel_version=(6, 18),
+            cpu_vendor="intel",
+            nested_kvm=False,
+        ),
+    )
     content = _build_compose_content(_cfg())
     assert 'CPU_FLAGS: "arch_capabilities=off"' in content
 
@@ -152,9 +177,28 @@ def test_compose_cpu_flags_unknown_arch_falls_through_to_x86(monkeypatch):
     behaviour. Intentional: an unsupported platform should surface a
     clear QEMU error at pod start rather than silently using a partly-
     correct ARM config.
+
+    Mocks the tuning capability to an invtsc-True host (see
+    ``test_compose_cpu_flags_x86_64`` for why ``tuning_profile = "off"``
+    alone isn't enough anymore) so this only exercises the arch fallback.
     """
+    import winpodx.utils.specs as specs
+
     monkeypatch.setattr(_compose_module.platform, "machine", lambda: "riscv64")
     monkeypatch.setattr(_config_module.platform, "machine", lambda: "riscv64")
+    monkeypatch.setattr(
+        specs,
+        "detect_tuning_capability",
+        lambda *, vm_cpu_cores, vm_ram_gb: specs.TuningCapability(
+            invtsc=True,
+            io_uring=True,
+            hugepages_enabled=False,
+            dedicated_host=False,
+            kernel_version=(6, 18),
+            cpu_vendor="intel",
+            nested_kvm=False,
+        ),
+    )
     content = _build_compose_content(_cfg())
     assert 'CPU_FLAGS: "arch_capabilities=off"' in content
 
@@ -471,11 +515,8 @@ def test_compose_cpu_flags_invtsc_auto_profile_appends_when_supported(monkeypatc
     assert 'VMX: "N"' in content
 
 
-def test_compose_cpu_flags_invtsc_skipped_when_host_lacks_flag(monkeypatch):
-    """Even with ``tuning_profile = "auto"``, a host without
-    ``constant_tsc + nonstop_tsc`` must not get ``+invtsc`` in CPU_FLAGS
-    -- QEMU would either silently drop it or refuse to start.
-    """
+@pytest.mark.parametrize("profile", ["auto", "off"])
+def test_compose_cpu_flags_invtsc_false_overrides_dockur(monkeypatch, profile):
     import winpodx.utils.specs as specs
 
     monkeypatch.setattr(_compose_module.platform, "machine", lambda: "x86_64")
@@ -494,9 +535,9 @@ def test_compose_cpu_flags_invtsc_skipped_when_host_lacks_flag(monkeypatch):
         ),
     )
     cfg = _cfg()
-    cfg.pod.tuning_profile = "auto"
+    cfg.pod.tuning_profile = profile
     content = _build_compose_content(cfg)
-    assert "+invtsc" not in content
+    assert 'CPU_FLAGS: "arch_capabilities=off,-invtsc"' in content
 
 
 def test_compose_cpu_flags_aarch64_ignores_tuning_profile(monkeypatch):
