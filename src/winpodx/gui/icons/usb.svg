@@ -1,9 +1,9 @@
 <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
-  <path d='M12 20V6' stroke='currentColor' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/>
-  <path d='M9.5 8.5L12 4l2.5 4.5z' stroke='currentColor' stroke-width='2' fill='currentColor' stroke-linecap='round' stroke-linejoin='round'/>
-  <circle cx='12' cy='20' r='2' stroke='currentColor' stroke-width='2' fill='none'/>
-  <path d='M12 15l-4-3' stroke='currentColor' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/>
-  <rect x='5' y='8.5' width='4' height='4' rx='0.5' stroke='currentColor' stroke-width='2' fill='none' stroke-linejoin='round'/>
-  <path d='M12 12l4-3' stroke='currentColor' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/>
-  <circle cx='17.5' cy='8' r='2' stroke='currentColor' stroke-width='2' fill='currentColor'/>
+  <path d='M12 19.5V5' stroke='currentColor' stroke-width='1.8' fill='none' stroke-linecap='round'/>
+  <path d='M12 2.5l2.8 4.8h-5.6z' fill='currentColor'/>
+  <circle cx='12' cy='20.2' r='1.9' fill='currentColor'/>
+  <path d='M12 14.6L8.2 10.8' stroke='currentColor' stroke-width='1.8' fill='none' stroke-linecap='round'/>
+  <rect x='5' y='7.6' width='3.6' height='3.6' rx='0.4' fill='currentColor'/>
+  <path d='M12 11.6L15.8 7.8' stroke='currentColor' stroke-width='1.8' fill='none' stroke-linecap='round'/>
+  <circle cx='17.1' cy='6.5' r='1.9' fill='currentColor'/>
 </svg>
