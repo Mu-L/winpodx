@@ -11,34 +11,60 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [0.11.0] - 2026-09-07
 
+The first release since 0.10.4, covering roughly two months of work: a rebuilt
+desktop app, faster and clearer provisioning feedback, Linux apps reachable from
+Windows' URL handlers, host-language Windows installs, and a Python 3.10 floor.
+
 ### Added
 
-- **The Qt6 desktop app now uses a Windows 11 Settings-style shell that keeps the controls for a running Windows pod in one place.** Dashboard is the home page, with pod state and Start/Stop controls, RAM, CPU, and disk rings, quick actions, running sessions, pinned app tiles, and the reverse-open switch. Applications presents the discovered Start Menu catalogue as searchable tiles or a list with category counts and context actions. Settings groups connection, hardware, update, integration, localization, and destructive controls, with a header dirty indicator until changes are saved. Tools, Terminal, Info, Devices, and License complete the page set; the Devices page groups USB and PCI devices, shows assignment counts, supports filtering, and flags risky PCI assignments.
-
-- **Provisioning progress now reads dockur's `msg.html` status endpoint before falling back to container logs** (#863). The CLI and GUI can show the current upstream phase without waiting for buffered log output, while retaining the existing log-based path when the HTTP status page is unavailable.
+- **The Qt6 desktop app has been rebuilt as a Windows 11 Settings-style shell.** Dashboard is the home page, with pod state and Start/Stop, RAM, CPU and disk rings, quick actions, running sessions, pinned app tiles, and the reverse-open switch. Applications presents the discovered Start Menu catalogue as searchable tiles or a list, with category counts and per-app context actions. Settings groups connection, hardware, Windows Update, integration, localization and destructive controls by intent, and marks the Save button until changes are written. Tools, Terminal, Info, Devices and License complete the page set; Devices groups USB and PCI by bus with assignment counts, a filter, and a flag on risky PCI assignments. `winpodx launch` becomes a compact Start-style flyout in the same visual language.
+- **Linux apps can now be registered as handlers for Windows URL schemes** (#798, #694). Clicking a `mailto:` or custom-scheme link inside the Windows guest routes it back to the matching host application through the same controlled listener that already handles files (#796), so a link in a Windows app can open your Linux mail client or browser.
+- **Windows now installs in the host's language by default** (#804, #791, #790). WinPodX picks the install locale from your desktop instead of defaulting to English, and an empty `install locale` setting means "autodetect" rather than "en-US" (#806).
+- **Media drive redirection can be turned off** (#840). Some setups do not want removable media exposed to the guest; the RDP layer now takes an opt-out, documented and present in the shipped config example.
+- **Provisioning progress reads dockur's `msg.html` status endpoint before falling back to container logs** (#863, closes #852). The CLI and GUI show the current upstream phase without waiting for buffered log output, with bounded polling, a hardened parser, plain-text Qt rendering, and the log-based path kept as fallback.
+- **PCI VFIO passthrough**, including exposure of each assigned device's IOMMU group node (#817, by @silentone12725).
 
 ### Changed
 
-- **The desktop shell now adapts its navigation and window chrome to the available space instead of forcing a fixed launcher layout.** At normal widths it shows a 320 px navigation pane; below 1100 px it becomes a 48 px icon rail, and an expanded pane overlays the page and closes when the user clicks outside it. A custom title bar supplies minimize, maximize, close, drag, and double-click maximize behavior. Set `WINPODX_NATIVE_TITLEBAR=1` to restore system decorations. The Fluent light and dark theme follows the operating system, with `WINPODX_COLOR_SCHEME=light` or `dark` available for a temporary override. The bundled Selawik fallback font keeps the interface readable where Segoe UI Variable and Segoe UI are absent.
-
-- **`winpodx launch` now opens as a compact Start-style flyout** — search, pinned and recent rows, and the full app grid, styled like the desktop app and following the same light/dark scheme.
-
-- **The tray app launcher now stays current and preserves each app's complete launch configuration.** Visible Windows applications are sorted consistently by launcher tier and name, hidden applications are excluded, and the previous 20-app cap is gone. Tray launches now carry launch URIs, window-class hints, default arguments, app icons, and per-app RDP overrides. The menu refreshes both when opened and on the status timer for desktops such as KDE Plasma that do not reliably emit nested-menu signals; if the app catalogue cannot be read, the last working menu remains available. Behavioural tests cover ordering, filtering, launch metadata, action ownership, and failure-safe rebuilding.
-- **Host-device lists now show useful PCI names and passthrough-oriented ordering** (by @silentone12725, #819). PCI entries retain their stable hardware IDs while also showing vendor/model names, localized class labels, and IOMMU metadata. USB peripherals remain first; PCI endpoints are ranked by usefulness across both grouped and ungrouped devices, while every IOMMU group stays adjacent and ordered by PCI address. The CLI and GUI share the same ordering policy.
+- **The desktop shell adapts its navigation and window chrome to the available space.** At normal widths it shows a 320 px navigation pane; below 1100 px it collapses to a 48 px icon rail, where the hamburger button overlays the pane on top of the page and dismisses it on an outside click or a page switch. A custom title bar supplies minimize, maximize, close, drag and double-click-maximize; set `WINPODX_NATIVE_TITLEBAR=1` to keep your window manager's decorations. The Fluent light and dark theme follows the operating system, with `WINPODX_COLOR_SCHEME=light|dark` as an override. The bundled Selawik fallback font keeps the interface readable where Segoe UI Variable and Segoe UI are absent.
+- **The tray app launcher stays current and preserves each app's full launch configuration** (#818, by @silentone12725). Visible Windows applications are sorted by launcher tier and name, hidden applications are excluded, and the previous 20-app cap is gone. Tray launches now carry launch URIs, window-class hints, default arguments, app icons, and per-app RDP overrides. The menu refreshes both when opened and on the status timer, for desktops such as KDE Plasma that do not reliably emit nested-menu signals; if the app catalogue cannot be read, the last working menu stays available. The menu also scrolls instead of paginating (#830).
+- **Host-device lists show useful PCI names and passthrough-oriented ordering** (#819, by @silentone12725). PCI entries keep their stable hardware IDs while also showing vendor/model names, localized class labels and IOMMU metadata. USB peripherals stay first; PCI endpoints are ranked by usefulness, and every IOMMU group stays adjacent and ordered by PCI address. The CLI and GUI share one ordering policy.
+- **The dockur image pin moved to v6.05, and rootless user-mode is no longer forced** (#799, #735, #770; runtime pins refreshed for #843, #844). New installs use GHCR image pins.
+- **`winpodx install` announces its two multi-minute silent stretches** (#805, #789), so a fresh install no longer looks hung during the ISO download and the OEM pass.
+- **FreeRDP handling was consolidated**: one shared version probe that warns about a RemoteApp-breaking old RAIL at launch (#797, #785), and auto mode now prefers a current native FreeRDP over an older one (#702).
 
 ### Removed
 
-- **Python 3.9 support has been removed; WinPodX now requires Python 3.10 or newer.** The desktop app redesign needs modern dataclass and typing behavior, and Python 3.9 was the only supported runtime that still needed compatibility shims. Python 3.10 continues to install `tomli` because stdlib `tomllib` begins with Python 3.11. On RHEL 9, AlmaLinux 9, and Rocky Linux 9, the el9 package pulls in the Python 3.11 stack from AppStream.
+- **Python 3.9 support has been removed; WinPodX now requires Python 3.10 or newer.** The desktop app redesign wants modern dataclass and typing behaviour, and 3.9 was the only supported runtime still needing compatibility shims. Python 3.10 continues to pull `tomli` because stdlib `tomllib` starts at 3.11. On RHEL 9, AlmaLinux 9 and Rocky Linux 9 the default `python3` is 3.9, so the el9 package now builds against and requires the Python 3.11 stack from AppStream.
 
 ### Fixed
 
-- **Dashboard resource colors and application labels now match their meaning** (#811, #812; by @silentone12725 in #819, thanks @GameSoul7Eugene). RAM uses the mauve accent, CPU and normal disk usage use blue, and disk usage turns red at the configured auto-grow threshold. The same threshold now exposes a translated warning through Qt accessibility properties instead of relying on color alone. The launcher is named "Applications" consistently across navigation, empty states, documentation, and all six translated catalogs.
-
-- **PCI passthrough now exposes the assigned device's VFIO IOMMU-group node to the container.** The generated compose configuration previously exposed only `/dev/vfio/vfio`; QEMU also needs `/dev/vfio/<group>` to open an assigned PCI device, so passthrough could fail even when the device was correctly bound to `vfio-pci`. WinPodX now resolves every assigned PCI device's IOMMU group, exposes the corresponding group nodes alongside the VFIO control node, and de-duplicates nodes when multiple PCI functions share a group. It refuses to generate the pod configuration when an assigned device has no resolvable group, and validates host-derived group identifiers before constructing any `/dev/vfio/<group>` path.
+- **Windows no longer gets `+invtsc` on hosts whose kernel rejected the TSC** (#859, by p4tit0). The tuning profile cross-checks the host clocksource before granting the flag, fails closed when the clocksource sysfs cannot be read, and overrides dockur's own `+invtsc` with an explicit `-invtsc` so the container cannot re-add it. Granting it on a host that fell back to another clocksource produced an unstable guest clock.
+- **Dashboard resource colours and application labels match their meaning** (#811, #812; by @silentone12725 in #819, thanks @GameSoul7Eugene). RAM uses the mauve accent, CPU and normal disk usage use blue, and disk usage turns red at the configured auto-grow threshold — which also exposes a translated warning through Qt accessibility properties instead of relying on colour alone. The launcher is called "Applications" consistently across navigation, empty states, documentation and all six translated catalogues.
+- **PCI passthrough exposes the assigned device's VFIO IOMMU-group node to the container.** The generated compose configuration previously exposed only `/dev/vfio/vfio`; QEMU also needs `/dev/vfio/<group>` to open an assigned device, so passthrough could fail even when the device was correctly bound to `vfio-pci`. WinPodX now resolves every assigned device's IOMMU group, exposes the corresponding nodes alongside the control node, de-duplicates nodes shared by multiple functions of one device, refuses to generate the pod configuration when a group cannot be resolved, and validates host-derived group identifiers before building any `/dev/vfio/<group>` path.
+- **Guest agent robustness**: a drifted guest token is healed from every caller rather than only `doctor` (#801, #730), and `/exec` scripts run through a UTF-8 launcher so the guest console code page can no longer mangle their output (#809, #808).
+- **Discovery is reliable on low-resource hosts** (#832), and the image's `install.bat` lint report no longer reads as a provisioning failure (#800).
+- **Desktop entries**: `Exec=` lines resolve an absolute `winpodx` path (#795, #779), and PNG icons are filed under their real hicolor size (#803, #702).
+- **The full dockur status line is kept in the live bring-up log** (#842, by @rruxx and crux), instead of being truncated mid-message.
+- **The Windows search indexer is left alone unless you opt in** (#802, #570).
+- **`winpodx doctor` no longer reports OEM drift for an app version difference** (#827), and keeps MIME defaults opt-in while repairing (#820).
+- **Broken RemoteApp IME sync is masked** so CJK input no longer breaks in remote app windows (#815).
+- **The Simplified Chinese catalogue is complete** (#792, by @zkitefly).
+- **The debloat scripts' safe scope is locked by tests** (#845, by @GameSoul7Eugene), rejecting unsafe scheduled-task expansion and ads/widgets registry mutations.
+- **The GUI debloat picker styling is stable** (#813).
+- Star history charts are self-hosted rather than fetched from a third-party service (#861, #862).
 
 ### Contributors
 
-Thanks to @silentone12725 for these contributions.
+This release includes work from:
+
+- **@silentone12725** — PCI VFIO IOMMU group nodes (#817), tray launcher ordering and lifecycle (#818), dashboard resource colours and Windows app naming (#819)
+- **p4tit0** (birb-labs) — the `+invtsc` clocksource cross-check and its fail-closed handling (#859)
+- **@GameSoul7Eugene** — debloat safe-scope regression tests (#845), and the reports behind the dashboard colour fixes (#811, #812)
+- **@rruxx**, with **crux** — keeping the full dockur status line in the live log (#842)
+- **@zkitefly** — completing the Simplified Chinese catalogue (#792)
+
+Thanks also to everyone who filed the issues fixed here: #570, #694, #702, #730, #735, #770, #779, #785, #789, #790, #791, #811, #812, #813, #815, #820, #827, #836, #840, #843, #844, #852.
 
 ## [0.10.4] - 2026-07-27
 
