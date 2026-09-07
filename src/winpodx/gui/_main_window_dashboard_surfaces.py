@@ -17,13 +17,12 @@ from PySide6.QtWidgets import (
 )
 
 from winpodx.core.i18n import tr
+from winpodx.gui import theme
 from winpodx.gui._main_window_navpane import _app_icon_pixmap
 from winpodx.gui._ring_gauge import RingGauge
 from winpodx.gui._widget_helpers import make_settings_card, make_settings_group, make_toggle_switch
 from winpodx.gui.icons import load_icon
 from winpodx.gui.theme import (
-    BTN_GHOST,
-    BTN_PRIMARY,
     CONTROL_HEIGHT_W11,
     FONT_BODY,
     FONT_CAPTION,
@@ -125,7 +124,7 @@ class _DashboardSurfacesMixin:
         action = QPushButton(tr("Start Pod"))
         action.setObjectName("podPrimaryAction")
         action.setStyleSheet(
-            BTN_PRIMARY
+            theme.BTN_PRIMARY
             + f" QPushButton {{ border-radius: {RADIUS_S}px; min-height: {HIT_TARGET}px; }}"
         )
         action.setMinimumHeight(HIT_TARGET)
@@ -230,7 +229,7 @@ class _DashboardSurfacesMixin:
             btn = QPushButton(tr(label))
             btn.setIcon(load_icon(icon_name, C.TEXT, 16))
             btn.setIconSize(QSize(16, 16))
-            btn.setStyleSheet(BTN_GHOST + "QPushButton { padding: 0px 8px; }")
+            btn.setStyleSheet(theme.BTN_GHOST + "QPushButton { padding: 0px 8px; }")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setAccessibleName(tr(label))
             btn.setFixedHeight(CONTROL_HEIGHT_W11)

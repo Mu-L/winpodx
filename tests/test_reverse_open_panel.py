@@ -300,7 +300,7 @@ def test_build_panel_rows_are_settings_cards_with_32px_actions() -> None:
         assert row.action_widget.property("w11Role") == "ghost"
         assert row.action_widget.minimumHeight() >= 32
         icon = next(lbl for lbl in row.findChildren(QLabel) if not lbl.pixmap().isNull())
-        assert icon.width() == 24
+        assert icon.width() == 28
     assert panel.findChildren(QListWidget) == []
     for btn in panel.findChildren(QPushButton):
         assert btn.minimumHeight() >= 32

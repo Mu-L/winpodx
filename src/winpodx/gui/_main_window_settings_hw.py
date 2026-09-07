@@ -6,7 +6,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QComboBox, QLineEdit
 
 from winpodx.core.i18n import tr
-from winpodx.gui.theme import COMBO
+from winpodx.gui import theme
 
 
 class SettingsHwMixin:
@@ -21,7 +21,7 @@ class SettingsHwMixin:
         self.input_ram = QLineEdit(str(self.cfg.pod.ram_gb))
         self.input_idle = QLineEdit(str(self.cfg.pod.idle_timeout))
         self.input_idle_action = QComboBox()
-        self.input_idle_action.setStyleSheet(COMBO)
+        self.input_idle_action.setStyleSheet(theme.COMBO)
         self.input_idle_action.addItem(tr("Pause (free CPU, keep RAM)"), "pause")
         self.input_idle_action.addItem(tr("Stop (free RAM, boots on next launch)"), "stop")
         raw_idle = self.cfg.pod.idle_action
@@ -94,5 +94,5 @@ class SettingsHwMixin:
         dl_idx = self.input_disguise_level.findData(self.cfg.pod.disguise_level)
         if dl_idx >= 0:
             self.input_disguise_level.setCurrentIndex(dl_idx)
-        self.input_disguise_level.setStyleSheet(COMBO)
+        self.input_disguise_level.setStyleSheet(theme.COMBO)
         self.input_disguise_level.setMinimumHeight(32)

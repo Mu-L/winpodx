@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from winpodx.core.app import list_available_apps
 from winpodx.core.config import Config
+from winpodx.gui import theme
 from winpodx.gui._frameless import FramelessMixin
 from winpodx.gui._main_window_apps import AppCrudMixin
 from winpodx.gui._main_window_bringup import BringUpMixin
@@ -39,7 +40,6 @@ from winpodx.gui._main_window_settings import SettingsPageMixin
 from winpodx.gui._shell_geometry import ShellGeometryMixin
 from winpodx.gui._title_bar import TitleBar
 from winpodx.gui.theme import (
-    GLOBAL_STYLE,
     PAGE_MARGIN_X,
     SPACE_XL,
     C,
@@ -199,7 +199,9 @@ class WinpodxWindow(
     def _build_ui(self) -> None:
         central = QWidget()
         central.setObjectName("centralRoot")
-        central.setStyleSheet(f"QWidget#centralRoot {{ background: {C.BASE}; }}\n" + GLOBAL_STYLE)
+        central.setStyleSheet(
+            f"QWidget#centralRoot {{ background: {C.BASE}; }}\n" + theme.GLOBAL_STYLE
+        )
         self.setCentralWidget(central)
         self._install_frameless()
         chrome = QVBoxLayout(central)

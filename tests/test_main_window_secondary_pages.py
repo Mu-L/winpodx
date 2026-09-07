@@ -172,7 +172,7 @@ def test_device_row_is_compact_48px_with_secondary_attach(devices_host) -> None:
         for lbl in row.findChildren(QLabel)
         if not lbl.pixmap().isNull() and lbl.objectName() == "settingsCardIcon"
     )
-    assert icon.width() == 24
+    assert icon.width() == 28
     assert icon.property("iconName") == "usb"
     assert row.findChild(QLabel, "riskGlyph") is None
 

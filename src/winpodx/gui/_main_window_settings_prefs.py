@@ -8,6 +8,7 @@ import logging
 from PySide6.QtWidgets import QComboBox, QLabel
 
 from winpodx.core.i18n import tr
+from winpodx.gui import theme
 from winpodx.gui._main_window_settings_locale import (
     _COMMON_TIMEZONES,
     _DOCKUR_KEYBOARDS,
@@ -16,7 +17,7 @@ from winpodx.gui._main_window_settings_locale import (
 )
 from winpodx.gui._toggle_switch import ToggleSwitch
 from winpodx.gui._widget_helpers import mark_fluid_wrap
-from winpodx.gui.theme import COMBO, FONT_CAPTION, C
+from winpodx.gui.theme import FONT_CAPTION, C
 
 
 class SettingsPrefsMixin:
@@ -146,7 +147,7 @@ class SettingsPrefsMixin:
             "it": "Italiano",
         }
         self.input_ui_language = QComboBox()
-        self.input_ui_language.setStyleSheet(COMBO)
+        self.input_ui_language.setStyleSheet(theme.COMBO)
         for code in _UI_LANGUAGES:
             self.input_ui_language.addItem(lang_labels.get(code, code), code)
         cur = self.cfg.ui.language if self.cfg.ui.language in _UI_LANGUAGES else "auto"

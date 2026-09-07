@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from winpodx.core.config import Config
 from winpodx.core.i18n import tr
+from winpodx.gui import theme
 from winpodx.gui._main_window_secondary_style import mount_settings_column
 from winpodx.gui._main_window_settings_cards import SettingsCardsMixin
 from winpodx.gui._main_window_settings_groups import SettingsGroupsMixin
@@ -27,7 +28,6 @@ from winpodx.gui._main_window_settings_prefs import SettingsPrefsMixin
 from winpodx.gui._main_window_settings_rdp import SettingsRdpMixin
 from winpodx.gui._main_window_settings_save import SettingsSaveMixin
 from winpodx.gui._widget_helpers import guard_wheel_scroll
-from winpodx.gui.theme import BTN_PRIMARY, SCROLL_AREA
 
 
 class SettingsPageMixin(
@@ -48,7 +48,7 @@ class SettingsPageMixin(
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(SCROLL_AREA)
+        scroll.setStyleSheet(theme.SCROLL_AREA)
         self._settings_scroll = scroll
         self._settings_page = page
 
@@ -57,7 +57,7 @@ class SettingsPageMixin(
         self._settings_cols = layout
 
         save_btn = QPushButton(tr("Save Settings"))
-        save_btn.setStyleSheet(BTN_PRIMARY)
+        save_btn.setStyleSheet(theme.BTN_PRIMARY)
         save_btn.setFixedWidth(180)
         save_btn.setMinimumHeight(32)
         save_btn.clicked.connect(self._save_settings)

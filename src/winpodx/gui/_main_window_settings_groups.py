@@ -16,14 +16,11 @@ from PySide6.QtWidgets import (
 )
 
 from winpodx.core.i18n import tr
+from winpodx.gui import theme
 from winpodx.gui._main_window_settings_cards import _add_group_chrome, _new_settings_group
 from winpodx.gui._settings_card import make_settings_card
 from winpodx.gui._widget_helpers import make_warning_callout, mark_fluid_wrap
 from winpodx.gui.theme import (
-    BTN_DANGER,
-    BTN_PRIMARY,
-    BTN_SECONDARY,
-    COMBO,
     FONT_CAPTION,
     RADIUS_S,
     SPACE_S,
@@ -161,7 +158,7 @@ class SettingsGroupsMixin:
             tr("QEMU + Windows-on-KVM knob preset"),
         )
         profile_combo.setMinimumHeight(32)
-        profile_combo.setStyleSheet(COMBO)
+        profile_combo.setStyleSheet(theme.COMBO)
         body.addWidget(profile_combo)
         summary_header = QLabel(tr("Detection summary (this host)"))
         summary_header.setStyleSheet(
@@ -197,15 +194,15 @@ class SettingsGroupsMixin:
         caption = group.findChild(QLabel, "settingsGroupCaption")
         self._update_status_label = caption if caption is not None else QLabel(tr("Checking..."))
         self._btn_enable_updates = QPushButton(tr("Enable"))
-        self._btn_enable_updates.setStyleSheet(BTN_PRIMARY)
+        self._btn_enable_updates.setStyleSheet(theme.BTN_PRIMARY)
         self._btn_enable_updates.setMinimumHeight(32)
         self._btn_enable_updates.clicked.connect(self._on_enable_updates)
         self._btn_disable_updates = QPushButton(tr("Disable"))
-        self._btn_disable_updates.setStyleSheet(BTN_DANGER)
+        self._btn_disable_updates.setStyleSheet(theme.BTN_DANGER)
         self._btn_disable_updates.setMinimumHeight(32)
         self._btn_disable_updates.clicked.connect(self._on_disable_updates)
         self._btn_retry_updates = QPushButton(tr("Retry"))
-        self._btn_retry_updates.setStyleSheet(BTN_SECONDARY)
+        self._btn_retry_updates.setStyleSheet(theme.BTN_SECONDARY)
         self._btn_retry_updates.setMinimumHeight(32)
         self._btn_retry_updates.clicked.connect(self._refresh_update_status)
         self._btn_retry_updates.setVisible(False)

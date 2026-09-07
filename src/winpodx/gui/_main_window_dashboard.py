@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from winpodx.core.i18n import tr
 from winpodx.core.stats import ResourceSnapshot, pod_resource_snapshot
+from winpodx.gui import theme
 from winpodx.gui._main_window_dashboard_sessions import _DashboardSessionsMixin
 from winpodx.gui._main_window_dashboard_style import _DashboardStyleMixin
 from winpodx.gui._main_window_dashboard_surfaces import (
@@ -45,7 +46,6 @@ from winpodx.gui.icons import load_icon
 from winpodx.gui.theme import (
     CONTENT_MAX_WIDTH,
     PAGE_MARGIN_X,
-    SCROLL_AREA,
     SCROLL_GUTTER,
     SPACE_XL,
     C,
@@ -106,7 +106,7 @@ class DashboardMixin(
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet(SCROLL_AREA)
+        scroll.setStyleSheet(theme.SCROLL_AREA)
 
         inner = QWidget()
         inner.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)

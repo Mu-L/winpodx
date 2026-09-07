@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 
 from winpodx.core.config import Config
 from winpodx.core.i18n import tr
+from winpodx.gui import theme
 from winpodx.gui._main_window_maintenance_cards import MaintenanceCardsMixin
 from winpodx.gui._main_window_secondary_style import (
     make_named_settings_group,
@@ -49,10 +50,6 @@ from winpodx.gui._widget_helpers import (
     make_warning_callout,
 )
 from winpodx.gui.theme import (
-    BTN_DANGER,
-    BTN_PRIMARY,
-    BTN_SECONDARY,
-    SCROLL_AREA,
     SPACE_XS,
     C,
 )
@@ -92,11 +89,11 @@ def _confirm_with_callout(
     btn_row = QHBoxLayout()
     btn_row.addStretch(1)
     cancel = QPushButton(tr("Cancel"))
-    cancel.setStyleSheet(BTN_SECONDARY)
+    cancel.setStyleSheet(theme.BTN_SECONDARY)
     cancel.clicked.connect(dlg.reject)
     btn_row.addWidget(cancel)
     proceed = QPushButton(tr("Proceed"))
-    proceed.setStyleSheet(BTN_DANGER if level == "danger" else BTN_PRIMARY)
+    proceed.setStyleSheet(theme.BTN_DANGER if level == "danger" else theme.BTN_PRIMARY)
     proceed.clicked.connect(dlg.accept)
     btn_row.addWidget(proceed)
     lay.addLayout(btn_row)
@@ -115,7 +112,7 @@ class MaintenanceMixin(MaintenanceCardsMixin):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(SCROLL_AREA)
+        scroll.setStyleSheet(theme.SCROLL_AREA)
 
         content = QWidget()
         layout = mount_settings_column(content)

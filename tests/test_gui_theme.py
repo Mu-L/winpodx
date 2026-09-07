@@ -411,3 +411,42 @@ def test_inner_control_svg_assets_exist() -> None:
         "chevron-up-dark.svg",
     ):
         assert (icons / name).is_file(), name
+
+
+def test_no_gui_module_binds_a_qss_string_at_import_time() -> None:
+    """``theme.rebuild()`` rebinds the QSS module attributes, so a
+    module-level ``from winpodx.gui.theme import BTN_PRIMARY`` captures the
+    import-time (light) stylesheet forever. Widgets rebuilt at runtime --
+    switching the Applications view mode, repopulating a list -- then render
+    with the wrong scheme. Every QSS name must be read live off the module.
+
+    Function-local imports are fine: they re-execute per call and so already
+    see the value ``rebuild`` installed.
+    """
+    import pathlib
+    import re
+
+    gui = pathlib.Path(__file__).resolve().parents[1] / "src" / "winpodx" / "gui"
+    qss_names: set[str] = set()
+    for qss_file in ("_theme_qss.py", "_theme_qss_controls.py"):
+        qss_names |= set(
+            re.findall(r'^\s*"([A-Z][A-Z0-9_]*)":', (gui / qss_file).read_text(), re.M)
+        )
+    assert "BTN_PRIMARY" in qss_names, "sanity: QSS name extraction found nothing"
+
+    offenders: list[str] = []
+    for module in sorted(gui.rglob("*.py")):
+        text = module.read_text()
+        pattern = (
+            r"^from winpodx\.gui\.theme import \(([^)]*)\)"
+            r"|^from winpodx\.gui\.theme import ([^\n(]+)"
+        )
+        for match in re.finditer(pattern, text, re.M):
+            imported = (match.group(1) or match.group(2) or "").replace("\n", " ")
+            for name in (part.strip().strip(",") for part in imported.split(",")):
+                if name in qss_names:
+                    offenders.append(f"{module.name}: {name}")
+
+    assert not offenders, (
+        "QSS strings bound at import time (use `theme.<NAME>` instead): " + ", ".join(offenders)
+    )

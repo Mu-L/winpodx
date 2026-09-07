@@ -89,7 +89,10 @@ def make_settings_card(
         row.setContentsMargins(0, 0, 0, 0)
     row.setSpacing(theme.SPACE_M)
 
-    icon_px = 24 if compact else 20
+    # Compact rows are 48px tall and carry a device/type glyph as their main
+    # visual anchor, so the icon gets the larger box; roomy 68px rows pair a
+    # 20px glyph with two lines of text, per WinUI SettingsCard.
+    icon_px = 28 if compact else 20
     if icon:
         icon_lbl = QLabel()
         icon_lbl.setObjectName("settingsCardIcon")

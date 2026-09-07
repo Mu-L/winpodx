@@ -26,9 +26,6 @@ from winpodx.gui import theme
 from winpodx.gui._widget_helpers import ElidingLabel, make_app_avatar, make_source_badge
 from winpodx.gui.icons import load_icon
 from winpodx.gui.theme import (
-    APP_TILE,
-    BTN_DANGER,
-    BTN_SECONDARY,
     CONTROL_HEIGHT_W11,
     FONT_BODY,
     FONT_CAPTION,
@@ -182,7 +179,7 @@ def make_library_list_tile(host: _ListTileHost, app: AppInfo) -> QFrame:
     """48px Applications list row: 24px icon, name + category, 32px Launch."""
     tile = QFrame()
     tile.setObjectName("appTile")
-    tile.setStyleSheet(APP_TILE)
+    tile.setStyleSheet(theme.APP_TILE)
     tile.setFixedHeight(_LIST_ROW_H)
 
     layout = QHBoxLayout(tile)
@@ -228,13 +225,13 @@ def make_library_list_tile(host: _ListTileHost, app: AppInfo) -> QFrame:
     launch_btn.setText(launch_btn.text().removeprefix("▶  "))
     launch_btn.setIcon(load_icon("play", C.TEXT, 16))
     launch_btn.setIconSize(QSize(16, 16))
-    launch_btn.setStyleSheet(BTN_SECONDARY)
+    launch_btn.setStyleSheet(theme.BTN_SECONDARY)
     launch_btn.setFixedHeight(CONTROL_HEIGHT_W11)
     launch_btn.clicked.connect(lambda: host._launch_app(app))
     layout.addWidget(launch_btn)
 
     edit_btn = QPushButton(tr("Edit"))
-    edit_btn.setStyleSheet(BTN_SECONDARY)
+    edit_btn.setStyleSheet(theme.BTN_SECONDARY)
     edit_btn.setFixedHeight(CONTROL_HEIGHT_W11)
     edit_btn.clicked.connect(lambda: host._on_edit_app(app))
     layout.addWidget(edit_btn)
@@ -244,14 +241,14 @@ def make_library_list_tile(host: _ListTileHost, app: AppInfo) -> QFrame:
 
         if discovered_profile_exists(app.name):
             reset_btn = QPushButton(tr("Reset"))
-            reset_btn.setStyleSheet(BTN_SECONDARY)
+            reset_btn.setStyleSheet(theme.BTN_SECONDARY)
             reset_btn.setFixedHeight(CONTROL_HEIGHT_W11)
             reset_btn.setToolTip(tr("Restore the auto-detected profile + icon"))
             reset_btn.clicked.connect(lambda: host._on_reset_app(app))
             layout.addWidget(reset_btn)
 
     hide_btn = QPushButton(tr("Show") if app.hidden else tr("Hide"))
-    hide_btn.setStyleSheet(BTN_SECONDARY)
+    hide_btn.setStyleSheet(theme.BTN_SECONDARY)
     hide_btn.setFixedHeight(CONTROL_HEIGHT_W11)
     hide_btn.clicked.connect(lambda: host._on_toggle_app_hidden(app))
     layout.addWidget(hide_btn)
@@ -260,7 +257,7 @@ def make_library_list_tile(host: _ListTileHost, app: AppInfo) -> QFrame:
     del_btn.setIcon(load_icon("close", C.PEACH, 16))
     del_btn.setIconSize(QSize(16, 16))
     del_btn.setFixedSize(CONTROL_HEIGHT_W11, CONTROL_HEIGHT_W11)
-    del_btn.setStyleSheet(BTN_DANGER)
+    del_btn.setStyleSheet(theme.BTN_DANGER)
     del_btn.clicked.connect(lambda: host._on_delete_app(app))
     layout.addWidget(del_btn)
     return tile

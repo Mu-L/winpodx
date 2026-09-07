@@ -17,10 +17,10 @@ from PySide6.QtWidgets import (
 
 from winpodx.core.app import AppInfo
 from winpodx.core.i18n import tr
-from winpodx.gui import launcher_state
+from winpodx.gui import launcher_state, theme
 from winpodx.gui._main_window_library import _AppTile
 from winpodx.gui._widget_helpers import make_empty_panel
-from winpodx.gui.theme import BTN_SECONDARY, FONT_BODY, SPACE_L, SPACE_M, SPACE_S, C
+from winpodx.gui.theme import FONT_BODY, SPACE_L, SPACE_M, SPACE_S, C
 
 
 def _running_app_names() -> set[str]:
@@ -147,7 +147,7 @@ class _DashboardWorkspaceMixin:
                 tr("Launch an app or pin one from Applications to see it here."),
             )
             button = QPushButton(tr("Applications"))
-            button.setStyleSheet(BTN_SECONDARY)
+            button.setStyleSheet(theme.BTN_SECONDARY)
             button.setAccessibleName(tr("Applications"))
             switch = getattr(self, "_switch_page", None)
             if callable(switch):

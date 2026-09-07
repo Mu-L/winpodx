@@ -54,18 +54,12 @@ from winpodx.gui._widget_helpers import (
 )
 from winpodx.gui.icons import load_icon
 from winpodx.gui.theme import (
-    BTN_DANGER,
-    BTN_GHOST,
-    BTN_PRIMARY,
-    BTN_SECONDARY,
     PAGE_MARGIN_X,
-    SCROLL_AREA,
     SCROLL_GUTTER,
     SPACE_L,
     SPACE_M,
     SPACE_S,
     SPACE_XL,
-    VIEW_TOGGLE,
     C,
 )
 
@@ -122,7 +116,7 @@ class LibraryPageMixin(LibraryChipsMixin, LibraryStartMixin):
 
         toggle_wrap = QWidget()
         self._view_toggle_wrap = toggle_wrap
-        toggle_wrap.setStyleSheet(VIEW_TOGGLE)
+        toggle_wrap.setStyleSheet(theme.VIEW_TOGGLE)
         tgl = QHBoxLayout(toggle_wrap)
         tgl.setContentsMargins(0, 0, 0, 0)
         tgl.setSpacing(2)
@@ -148,7 +142,7 @@ class LibraryPageMixin(LibraryChipsMixin, LibraryStartMixin):
         self.refresh_btn = QPushButton(tr("Refresh Apps"))
         self.refresh_btn.setIcon(load_icon("refresh", C.TEXT, 16))
         self.refresh_btn.setIconSize(QSize(16, 16))
-        self.refresh_btn.setStyleSheet(BTN_SECONDARY)
+        self.refresh_btn.setStyleSheet(theme.BTN_SECONDARY)
         self.refresh_btn.setToolTip(tr("Scan the running pod for installed Windows apps"))
         self.refresh_btn.clicked.connect(self._on_refresh_apps)
         right_group.addWidget(self.refresh_btn)
@@ -160,7 +154,7 @@ class LibraryPageMixin(LibraryChipsMixin, LibraryStartMixin):
         self._show_hidden = False
         self.btn_show_hidden = QPushButton(tr("Hidden"))
         self.btn_show_hidden.setCheckable(True)
-        self.btn_show_hidden.setStyleSheet(BTN_SECONDARY)
+        self.btn_show_hidden.setStyleSheet(theme.BTN_SECONDARY)
         self.btn_show_hidden.setToolTip(
             tr("Show apps filtered by the noise denylist or manually hidden")
         )
@@ -171,7 +165,7 @@ class LibraryPageMixin(LibraryChipsMixin, LibraryStartMixin):
         # slug so discovery won't re-add it; this opens the un-delete list.
         # Hidden when there's nothing to restore.
         self.btn_deleted = QPushButton(tr("Deleted"))
-        self.btn_deleted.setStyleSheet(BTN_SECONDARY)
+        self.btn_deleted.setStyleSheet(theme.BTN_SECONDARY)
         self.btn_deleted.setToolTip(tr("Restore apps you previously deleted"))
         self.btn_deleted.clicked.connect(self._on_open_deleted_apps)
         self.btn_deleted.setVisible(False)
@@ -184,13 +178,13 @@ class LibraryPageMixin(LibraryChipsMixin, LibraryStartMixin):
         self._selected_names: set[str] = set()
         self.btn_select = QPushButton(tr("Select"))
         self.btn_select.setCheckable(True)
-        self.btn_select.setStyleSheet(BTN_SECONDARY)
+        self.btn_select.setStyleSheet(theme.BTN_SECONDARY)
         self.btn_select.setToolTip(tr("Select multiple apps to remove at once"))
         self.btn_select.clicked.connect(self._on_toggle_select_mode)
         right_group.addWidget(self.btn_select)
 
         add_btn = QPushButton(tr("+  Add App"))
-        add_btn.setStyleSheet(BTN_PRIMARY)
+        add_btn.setStyleSheet(theme.BTN_PRIMARY)
         add_btn.clicked.connect(self._on_add_app)
         self.add_app_btn = add_btn
         right_group.addWidget(add_btn)
@@ -219,10 +213,10 @@ class LibraryPageMixin(LibraryChipsMixin, LibraryStartMixin):
         # name labels below that QBoxLayout::heightForWidth feedback recurses
         # without bound and SIGSEGVs the whole GUI on "Refresh Apps" (confirmed
         # by the crash backtrace; same family as #532). Pinning the bar on keeps
-        # the viewport width stable so the loop can't form. The SCROLL_AREA
+        # the viewport width stable so the loop can't form. The theme.SCROLL_AREA
         # stylesheet keeps it visually unobtrusive.
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        scroll.setStyleSheet(SCROLL_AREA)
+        scroll.setStyleSheet(theme.SCROLL_AREA)
 
         self.app_list_container = QWidget()
         self.app_list_container.setStyleSheet("background: transparent;")
@@ -709,17 +703,17 @@ class LibraryPageMixin(LibraryChipsMixin, LibraryStartMixin):
         row.addWidget(self._batch_label)
         row.addStretch()
         self._batch_hide_btn = QPushButton(tr("Hide selected"))
-        self._batch_hide_btn.setStyleSheet(BTN_SECONDARY)
+        self._batch_hide_btn.setStyleSheet(theme.BTN_SECONDARY)
         self._batch_hide_btn.setEnabled(False)
         self._batch_hide_btn.clicked.connect(self._on_batch_hide)
         row.addWidget(self._batch_hide_btn)
         self._batch_remove_btn = QPushButton(tr("Remove selected"))
-        self._batch_remove_btn.setStyleSheet(BTN_DANGER)
+        self._batch_remove_btn.setStyleSheet(theme.BTN_DANGER)
         self._batch_remove_btn.setEnabled(False)
         self._batch_remove_btn.clicked.connect(self._on_batch_remove)
         row.addWidget(self._batch_remove_btn)
         cancel = QPushButton(tr("Cancel"))
-        cancel.setStyleSheet(BTN_GHOST)
+        cancel.setStyleSheet(theme.BTN_GHOST)
         cancel.clicked.connect(self._exit_select_mode)
         row.addWidget(cancel)
         self._batch_bar = bar

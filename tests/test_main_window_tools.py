@@ -426,7 +426,7 @@ def test_session_row_is_compact_with_terminate_ghost(maint):
     assert btn.text() == "Terminate"
     assert btn.minimumHeight() >= 32
     icon = next(lbl for lbl in row.findChildren(QLabel) if not lbl.pixmap().isNull())
-    assert icon.width() == 24
+    assert icon.width() == 28
 
 
 def test_sessions_panel_lists_live_sessions(monkeypatch):

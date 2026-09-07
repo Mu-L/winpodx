@@ -116,7 +116,7 @@ def test_settings_card_keeps_toggle_on_the_title_row(qapp: QApplication) -> None
     assert abs(action_c.y() - title_c.y()) <= 24
 
 
-def test_compact_settings_card_is_48px_with_24px_icon(qapp: QApplication) -> None:
+def test_compact_settings_card_is_48px_with_28px_icon(qapp: QApplication) -> None:
     action = QPushButton("Go")
     card = helpers.make_settings_card(
         "hardware",
@@ -131,8 +131,8 @@ def test_compact_settings_card_is_48px_with_24px_icon(qapp: QApplication) -> Non
     assert card.minimumHeight() == 48
     assert card.layout().contentsMargins().left() == 0
     icon = next(lbl for lbl in card.findChildren(QLabel) if not lbl.pixmap().isNull())
-    assert icon.width() == 24
-    assert icon.height() == 24
+    assert icon.width() == 28
+    assert icon.height() == 28
 
 
 def test_settings_card_long_title_elides_instead_of_widening_the_card(qapp: QApplication) -> None:

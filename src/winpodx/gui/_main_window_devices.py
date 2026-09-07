@@ -52,11 +52,7 @@ from winpodx.gui._widget_helpers import (
 )
 from winpodx.gui.icons import load_icon
 from winpodx.gui.theme import (
-    BTN_DANGER,
-    BTN_PRIMARY,
-    BTN_SECONDARY,
     FONT_BODY,
-    SCROLL_AREA,
     SPACE_L,
     SPACE_M,
     SPACE_XL,
@@ -125,7 +121,7 @@ class DevicesMixin(DevicesCardsMixin):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet(SCROLL_AREA)
+        scroll.setStyleSheet(theme_mod.SCROLL_AREA)
 
         content = QWidget()
         outer = mount_settings_column(content)
@@ -327,11 +323,11 @@ class DevicesMixin(DevicesCardsMixin):
             if role == "ghost":
                 btn.setStyleSheet(chevron_button_qss())
                 continue
-            qss = BTN_SECONDARY
+            qss = theme_mod.BTN_SECONDARY
             if role == "danger":
-                qss = BTN_DANGER
+                qss = theme_mod.BTN_DANGER
             elif role == "primary":
-                qss = BTN_PRIMARY
+                qss = theme_mod.BTN_PRIMARY
             apply_w11_button(btn, qss, role=role)
 
     # -- actions ----------------------------------------------------------

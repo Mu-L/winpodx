@@ -32,9 +32,6 @@ from winpodx.core.i18n import tr
 from winpodx.gui import theme as theme_mod
 from winpodx.gui.icons import load_icon
 from winpodx.gui.theme import (
-    BTN_PRIMARY,
-    INFO_BAR,
-    STATUS_BANNER_WARN,
     C,
 )
 
@@ -57,7 +54,7 @@ class HeaderMixin:
     def _build_status_banner(self) -> QFrame:
         banner = QFrame()
         banner.setObjectName("statusBanner")
-        banner.setStyleSheet(STATUS_BANNER_WARN)
+        banner.setStyleSheet(theme_mod.STATUS_BANNER_WARN)
 
         layout = QHBoxLayout(banner)
         layout.setContentsMargins(24, 0, 24, 0)
@@ -80,7 +77,7 @@ class HeaderMixin:
         # relabel it "Restart" (recovery) vs the default "Start Now". The
         # action is the same ensure_ready() path either way.
         self.banner_btn = QPushButton(tr("Start Now"))
-        self.banner_btn.setStyleSheet(BTN_PRIMARY)
+        self.banner_btn.setStyleSheet(theme_mod.BTN_PRIMARY)
         self.banner_btn.clicked.connect(self._on_start_pod)
         layout.addWidget(self.banner_btn)
 
@@ -90,7 +87,7 @@ class HeaderMixin:
     def _build_info_bar(self) -> QWidget:
         bar = QWidget()
         bar.setObjectName("infoBar")
-        bar.setStyleSheet(INFO_BAR)
+        bar.setStyleSheet(theme_mod.INFO_BAR)
 
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(24, 0, 24, 0)
