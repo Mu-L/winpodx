@@ -19,13 +19,12 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
+    # No per-minor classifiers: the hatchling shipped by Debian 12 / Ubuntu
+    # 24.04 validates against its own trove list and rejects ":: 3.13" and
+    # newer, which fails the distro .deb build. requires-python is the
+    # authoritative declaration of the supported range.
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Desktop Environment",
 ]
 

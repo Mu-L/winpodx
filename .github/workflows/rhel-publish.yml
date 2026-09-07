@@ -90,9 +90,16 @@ jobs:
           fi
           dnf -y install \
             "${pyprefix}" "${pyprefix}-pip" "${pyprefix}-wheel" \
-            "${pyprefix}-setuptools" "${pyprefix}-hatchling" \
-            "${pyprefix}-installer" "${pyprefix}-pluggy" \
+            "${pyprefix}-setuptools" "${pyprefix}-pluggy" \
             pyproject-rpm-macros python-rpm-macros
+          # EPEL 9 ships hatchling/installer only for the default python3 (3.9),
+          # never for the python3.11 stack, so pip them into that interpreter.
+          # el10/Fedora have them as real packages.
+          if [ "${{ matrix.suffix }}" = "el9" ]; then
+            "${pyprefix}" -m pip install --quiet hatchling installer
+          else
+            dnf -y install "${pyprefix}-hatchling" "${pyprefix}-installer"
+          fi
 
       - name: Prepare rpmbuild tree
         shell: bash

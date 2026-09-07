@@ -60,8 +60,13 @@ BuildRequires:  python%{python3_pkgversion} >= 3.10
 BuildRequires:  python%{python3_pkgversion}-pip
 BuildRequires:  python%{python3_pkgversion}-wheel
 BuildRequires:  python%{python3_pkgversion}-setuptools
+# EPEL 9 packages hatchling/installer only for the default python3 (3.9), not
+# for the python3.11 stack this spec builds against there, so on el9 the CI job
+# pip-installs both into python3.11 before rpmbuild runs.
+%if ! (0%{?rhel} && 0%{?rhel} <= 9)
 BuildRequires:  python%{python3_pkgversion}-hatchling
 BuildRequires:  python%{python3_pkgversion}-installer
+%endif
 BuildRequires:  pyproject-rpm-macros
 # Fedora 42: pluggy has two providers (pluggy / pluggy1.3). Pin the base one.
 BuildRequires:  python%{python3_pkgversion}-pluggy
