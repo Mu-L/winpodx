@@ -57,15 +57,27 @@ Windows' URL handlers, host-language Windows installs, and a Python 3.10 floor.
 
 ### Contributors
 
-This release includes work from:
+**Code.** This release includes changes written by:
 
 - **@silentone12725** — PCI VFIO IOMMU group nodes (#817), tray launcher ordering and lifecycle (#818), dashboard resource colours and Windows app naming (#819)
 - **p4tit0** (birb-labs) — the `+invtsc` clocksource cross-check and its fail-closed handling (#859)
-- **@GameSoul7Eugene** — debloat safe-scope regression tests (#845), and the reports behind the dashboard colour fixes (#811, #812)
+- **@GameSoul7Eugene** — debloat safe-scope regression tests (#845)
 - **@rruxx**, with **crux** — keeping the full dockur status line in the live log (#842)
 - **@zkitefly** — completing the Simplified Chinese catalogue (#792)
 
-Thanks also to everyone who filed the issues fixed here: #570, #694, #702, #730, #735, #770, #779, #785, #789, #790, #791, #811, #812, #813, #815, #820, #827, #836, #840, #843, #844, #852.
+**Reports.** Most of the fixes above exist because someone took the time to file a
+good issue:
+
+- **@ismikes** — the Full Desktop search bar (#570), install.sh silent stretches (#789), region and regional format autodetection (#790), and the bogus "guest is older than host" warning (#827)
+- **@GameSoul7Eugene** — resource-centre colours (#811), the "All apps" naming (#812), and the debloat dialog's appearance (#813)
+- **@notnotno** — reverse-open shim URL parameters (#694) and `winpodx` not being found from the desktop menu (#779)
+- **@zkitefly** — install-language autodetection (#791) and the CJK input window not disappearing in window-blending mode (#815)
+- **@twkirk161** — app icons always showing FreeRDP's icon (#702)
+- **@a012-alex** — the request to disable media drive redirection (#840)
+- **@MiguelAlejandria** — apps not opening from Mint's menu (#785)
+- **@vrvy-live** — FreeRDP never launching after a container install (#770)
+- **@rami-shalhoub** — Windows apps being set as defaults (#820)
+- **@iamcalledrob** — the Nix flake failing to run (#836)
 
 ## [0.10.4] - 2026-07-27
 
