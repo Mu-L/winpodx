@@ -96,7 +96,11 @@ jobs:
           # never for the python3.11 stack, so pip them into that interpreter.
           # el10/Fedora have them as real packages.
           if [ "${{ matrix.suffix }}" = "el9" ]; then
-            "${pyprefix}" -m pip install --quiet hatchling installer
+            # --prefix=/usr so the modules land in the system site-packages:
+            # rpm runs the build backend as `python3.11 -Bs`, and -s drops the
+            # user site pip would otherwise fall back to in this container.
+            "${pyprefix}" -m pip install --quiet --no-cache-dir \
+              --prefix=/usr hatchling installer
           else
             dnf -y install "${pyprefix}-hatchling" "${pyprefix}-installer"
           fi
