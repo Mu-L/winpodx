@@ -18,10 +18,11 @@ Windows' URL handlers, host-language Windows installs, and a Python 3.10 floor.
 ### Added
 
 - **The Qt6 desktop app has been rebuilt as a Windows 11 Settings-style shell.** Dashboard is the home page, with pod state and Start/Stop, RAM, CPU and disk rings, quick actions, running sessions, pinned app tiles, and the reverse-open switch. Applications presents the discovered Start Menu catalogue as searchable tiles or a list, with category counts and per-app context actions. Settings groups connection, hardware, Windows Update, integration, localization and destructive controls by intent, and marks the Save button until changes are written. Tools, Terminal, Info, Devices and License complete the page set; Devices groups USB and PCI by bus with assignment counts, a filter, and a flag on risky PCI assignments. `winpodx launch` becomes a compact Start-style flyout in the same visual language.
-- **Linux apps can now be registered as handlers for Windows URL schemes** (#798, #694). Clicking a `mailto:` or custom-scheme link inside the Windows guest routes it back to the matching host application through the same controlled listener that already handles files (#796), so a link in a Windows app can open your Linux mail client or browser.
-- **Windows now installs in the host's language by default** (#804, #791, #790). WinPodX picks the install locale from your desktop instead of defaulting to English, and an empty `install locale` setting means "autodetect" rather than "en-US" (#806).
-- **Media drive redirection can be turned off** (#840). Some setups do not want removable media exposed to the guest; the RDP layer now takes an opt-out, documented and present in the shipped config example.
+- **Linux apps can now be registered as handlers for Windows URL schemes** (#798, #694, thanks @notnotno). Clicking a `mailto:` or custom-scheme link inside the Windows guest routes it back to the matching host application through the same controlled listener that already handles files (#796), so a link in a Windows app can open your Linux mail client or browser.
+- **Windows now installs in the host's language by default** (#804, #791 by @zkitefly, #790 by @ismikes). WinPodX picks the install locale from your desktop instead of defaulting to English, and an empty `install locale` setting means "autodetect" rather than "en-US" (#806).
+- **Media drive redirection can be turned off** (#840, thanks @a012-alex). Some setups do not want removable media exposed to the guest; the RDP layer now takes an opt-out, documented and present in the shipped config example.
 - **Provisioning progress reads dockur's `msg.html` status endpoint before falling back to container logs** (#863, closes #852). The CLI and GUI show the current upstream phase without waiting for buffered log output, with bounded polling, a hardened parser, plain-text Qt rendering, and the log-based path kept as fallback.
+- **The Nix flake runs again** (#836, thanks @iamcalledrob).
 - **PCI VFIO passthrough**, including exposure of each assigned device's IOMMU group node (#817, by @silentone12725).
 
 ### Changed
@@ -30,8 +31,8 @@ Windows' URL handlers, host-language Windows installs, and a Python 3.10 floor.
 - **The tray app launcher stays current and preserves each app's full launch configuration** (#818, by @silentone12725). Visible Windows applications are sorted by launcher tier and name, hidden applications are excluded, and the previous 20-app cap is gone. Tray launches now carry launch URIs, window-class hints, default arguments, app icons, and per-app RDP overrides. The menu refreshes both when opened and on the status timer, for desktops such as KDE Plasma that do not reliably emit nested-menu signals; if the app catalogue cannot be read, the last working menu stays available. The menu also scrolls instead of paginating (#830).
 - **Host-device lists show useful PCI names and passthrough-oriented ordering** (#819, by @silentone12725). PCI entries keep their stable hardware IDs while also showing vendor/model names, localized class labels and IOMMU metadata. USB peripherals stay first; PCI endpoints are ranked by usefulness, and every IOMMU group stays adjacent and ordered by PCI address. The CLI and GUI share one ordering policy.
 - **The dockur image pin moved to v6.05, and rootless user-mode is no longer forced** (#799, #735, #770; runtime pins refreshed for #843, #844). New installs use GHCR image pins.
-- **`winpodx install` announces its two multi-minute silent stretches** (#805, #789), so a fresh install no longer looks hung during the ISO download and the OEM pass.
-- **FreeRDP handling was consolidated**: one shared version probe that warns about a RemoteApp-breaking old RAIL at launch (#797, #785), and auto mode now prefers a current native FreeRDP over an older one (#702).
+- **`winpodx install` announces its two multi-minute silent stretches** (#805, #789, thanks @ismikes), so a fresh install no longer looks hung during the ISO download and the OEM pass.
+- **FreeRDP handling was consolidated**: one shared version probe that warns about a RemoteApp-breaking old RAIL at launch (#797, #785, thanks @MiguelAlejandria), and auto mode now prefers a current native FreeRDP over an older one (#702, thanks @twkirk161). A container install that left FreeRDP unable to launch at all is fixed too (#770, thanks @vrvy-live).
 
 ### Removed
 
@@ -44,14 +45,14 @@ Windows' URL handlers, host-language Windows installs, and a Python 3.10 floor.
 - **PCI passthrough exposes the assigned device's VFIO IOMMU-group node to the container.** The generated compose configuration previously exposed only `/dev/vfio/vfio`; QEMU also needs `/dev/vfio/<group>` to open an assigned device, so passthrough could fail even when the device was correctly bound to `vfio-pci`. WinPodX now resolves every assigned device's IOMMU group, exposes the corresponding nodes alongside the control node, de-duplicates nodes shared by multiple functions of one device, refuses to generate the pod configuration when a group cannot be resolved, and validates host-derived group identifiers before building any `/dev/vfio/<group>` path.
 - **Guest agent robustness**: a drifted guest token is healed from every caller rather than only `doctor` (#801, #730), and `/exec` scripts run through a UTF-8 launcher so the guest console code page can no longer mangle their output (#809, #808).
 - **Discovery is reliable on low-resource hosts** (#832), and the image's `install.bat` lint report no longer reads as a provisioning failure (#800).
-- **Desktop entries**: `Exec=` lines resolve an absolute `winpodx` path (#795, #779), and PNG icons are filed under their real hicolor size (#803, #702).
+- **Desktop entries**: `Exec=` lines resolve an absolute `winpodx` path (#795, #779, thanks @notnotno), and PNG icons are filed under their real hicolor size (#803, #702, thanks @twkirk161).
 - **The full dockur status line is kept in the live bring-up log** (#842, by @rruxx and crux), instead of being truncated mid-message.
-- **The Windows search indexer is left alone unless you opt in** (#802, #570).
-- **`winpodx doctor` no longer reports OEM drift for an app version difference** (#827), and keeps MIME defaults opt-in while repairing (#820).
-- **Broken RemoteApp IME sync is masked** so CJK input no longer breaks in remote app windows (#815).
+- **The Windows search indexer is left alone unless you opt in** (#802, #570, thanks @ismikes).
+- **`winpodx doctor` no longer reports OEM drift for an app version difference** (#827, thanks @ismikes), and keeps MIME defaults opt-in while repairing (#820, thanks @rami-shalhoub).
+- **Broken RemoteApp IME sync is masked** so CJK input no longer breaks in remote app windows (#815, thanks @zkitefly).
 - **The Simplified Chinese catalogue is complete** (#792, by @zkitefly).
 - **The debloat scripts' safe scope is locked by tests** (#845, by @GameSoul7Eugene), rejecting unsafe scheduled-task expansion and ads/widgets registry mutations.
-- **The GUI debloat picker styling is stable** (#813).
+- **The GUI debloat picker styling is stable** (#813, thanks @GameSoul7Eugene).
 - Star history charts are self-hosted rather than fetched from a third-party service (#861, #862).
 
 ### Contributors
