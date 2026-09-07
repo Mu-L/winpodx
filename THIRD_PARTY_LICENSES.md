@@ -84,6 +84,17 @@ are not linked into the shipped binary.
 - Distribution: The OFL text is packaged beside the font files in the Python package. It
   therefore travels in the wheel, sdist, distro packages, and AppImage.
 
+### Bootstrap Icons (usb-symbol)
+
+- Source: https://github.com/twbs/icons (`icons/usb-symbol.svg`)
+- Copyright: 2019-2024 The Bootstrap Authors
+- License: MIT -- full text in `src/winpodx/gui/icons/LICENSE-bootstrap-icons.txt`
+- Files: `src/winpodx/gui/icons/usb.svg`
+- Why: the USB trident is a standardised mark; an in-house approximation misreads at 24-28px.
+  Every other icon in that directory is original WinPodX work.
+- Distribution: shipped unmodified inside the Python package, so it travels in the wheel,
+  sdist, distro packages, and AppImage alongside its licence text.
+
 ## Runtime dependency (always required)
 
 | Package | License | When | Notes |

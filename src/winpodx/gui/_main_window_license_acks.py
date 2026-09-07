@@ -130,6 +130,12 @@ _THIRD_PARTY_ACK: tuple[tuple[str, str, str, str], ...] = (
         "https://github.com/primer/primitives",
     ),
     (
+        "Bootstrap Icons",
+        "MIT",
+        "USB trident glyph (usb-symbol) used unmodified in the Devices page",
+        "https://github.com/twbs/icons",
+    ),
+    (
         "Microsoft Selawik",
         "OFL-1.1",
         "Bundled unmodified UI fallback font (Reserved Font Name: Selawik)",

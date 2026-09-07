@@ -1,1 +1,6 @@
 Original in-house MIT icons for WinPodX GUI controls; each asset is a 24x24 stroke-based SVG using currentColor so Qt can render a consistent themed icon set.
+
+Exception: usb.svg is Bootstrap Icons' `usb-symbol`, used unmodified because the USB
+trident has fixed official geometry that a hand-drawn approximation reads wrong at
+icon sizes. Bootstrap Icons is MIT licensed (c) 2019-2024 The Bootstrap Authors --
+full text in LICENSE-bootstrap-icons.txt, attribution in THIRD_PARTY_LICENSES.md.
