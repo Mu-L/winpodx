@@ -219,6 +219,35 @@ class TestBuildRunScript:
         assert "[telemetry]" in payload
         assert "[ads]" in payload
 
+    def test_payload_exit_code_ignores_a_tolerated_native_command_failure(self, catalog):
+        """#866: the payload must end on an explicit exit.
+
+        The per-item scripts call native tools (``schtasks``, ``reg``) whose
+        non-zero exits are deliberately tolerated -- ``scheduled_tasks.ps1``
+        documents that unknown task paths are harmless. A native command does
+        not raise, so the orchestrator's try/catch never sees it; it only sets
+        ``$LASTEXITCODE``, which without a trailing ``exit`` becomes the whole
+        payload's return code. Debloat then reported ``rc=1`` for a run whose
+        items all succeeded.
+        """
+        payload = build_run_script(catalog, ["scheduled_tasks"])
+        lines = [ln.strip() for ln in payload.strip().splitlines() if ln.strip()]
+
+        assert lines[-1] == "exit 0", (
+            "payload must end on an explicit `exit 0` so a tolerated native "
+            f"command cannot set the return code; got {lines[-1]!r}"
+        )
+        # A genuinely failed item must still be reported.
+        assert any("-lt $winpodxDebloatTotal" in ln and "exit 1" in ln for ln in lines), (
+            "payload must still exit non-zero when an item actually failed"
+        )
+
+    def test_undo_payload_also_ends_on_an_explicit_exit(self, catalog):
+        payload = build_undo_script(catalog, ["telemetry"])
+        lines = [ln.strip() for ln in payload.strip().splitlines() if ln.strip()]
+
+        assert lines[-1] == "exit 0"
+
     def test_unknown_item_via_resolve_then_build_raises(self, catalog):
         with pytest.raises(DebloatCatalogError):
             resolve_selection(catalog, preset=None, items=["nope"])

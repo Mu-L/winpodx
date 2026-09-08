@@ -29,6 +29,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -288,6 +289,19 @@ function Clear-WinpodxDebloatApplied {
 """
 
 
+# The per-item scripts call native tools (schtasks, reg) whose non-zero exits
+# are deliberately tolerated -- scheduled_tasks.ps1 documents that unknown task
+# paths are harmless. A native command never raises, so the per-item try/catch
+# cannot see it; it only sets $LASTEXITCODE, which without a trailing exit
+# becomes the whole payload's return code, and made a fully successful run
+# report rc=1 (#866). Exit on the item counters instead, so the return code
+# means "an item failed" and nothing else.
+_PAYLOAD_EXIT_PS: Final = (
+    "if ($winpodxDebloatOk -lt $winpodxDebloatTotal) { exit 1 }",
+    "exit 0",
+)
+
+
 def build_run_script(catalog: DebloatCatalog, selection: list[str]) -> str:
     """Build a single PowerShell payload that runs ``selection`` in order.
 
@@ -336,6 +350,7 @@ def build_run_script(catalog: DebloatCatalog, selection: list[str]) -> str:
         blocks.append("}")
 
     blocks.append('Write-Host "=== done: $winpodxDebloatOk/$winpodxDebloatTotal succeeded ==="')
+    blocks.extend(_PAYLOAD_EXIT_PS)
     return "\n".join(blocks)
 
 
@@ -385,6 +400,7 @@ def build_undo_script(catalog: DebloatCatalog, selection: list[str]) -> str:
     blocks.append(
         'Write-Host "=== undo done: $winpodxDebloatOk/$winpodxDebloatTotal succeeded ==="'
     )
+    blocks.extend(_PAYLOAD_EXIT_PS)
     return "\n".join(blocks)
 
 
