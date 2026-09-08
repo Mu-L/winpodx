@@ -4,7 +4,8 @@
 After the #287 refactor, CPU sub-flags live in the dedicated
 ``CPU_FLAGS:`` env (consumed by dockur's ``proc.sh``) rather than being
 injected through ``ARGUMENTS:``. ``ARGUMENTS:`` now carries only the
-non-``-cpu`` extras (virtio-rng device pair). dockur owns the hv-*
+non-``-cpu`` extras (device passthrough, disguise tables). dockur owns
+the RNG device (#853) and the hv-*
 enlightenments via its ``HV=Y`` default and the nested-virt sub-flags
 via the ``VMX=Y`` env.
 
@@ -138,6 +139,50 @@ def test_compose_cpu_flags_x86_64(monkeypatch):
     )
     content = _build_compose_content(_cfg())
     assert 'CPU_FLAGS: "arch_capabilities=off"' in content
+
+
+@pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
+def test_compose_normal_mode_leaves_the_rng_device_to_the_base_image(monkeypatch, arch):
+    """#853: exactly one virtio-rng, and it is the base image's.
+
+    qemus/qemu's src/config.sh already emits ``rng-random`` +
+    ``virtio-rng-pci`` unless ``RNG`` is disabled, so appending our own gave
+    the guest two RNG devices.
+    """
+    monkeypatch.setattr(_compose_module.platform, "machine", lambda: arch)
+    monkeypatch.setattr(_config_module.platform, "machine", lambda: arch)
+    cfg = _cfg()
+    cfg.pod.tuning_profile = "safe"  # the profile that used to add our own RNG
+
+    content = _build_compose_content(cfg)
+
+    assert "virtio-rng" not in content, "the base image owns the RNG device"
+    assert "rng-random" not in content
+    assert 'RNG: "N"' not in content, "normal mode keeps the base image default"
+
+
+@pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
+def test_compose_max_disguise_turns_the_base_rng_off(monkeypatch, arch):
+    """#853: max disguise has to remove the base image's RNG, not just ours.
+
+    The virtio RNG is a VEN_1AF4 PCI device, which is exactly the ID max
+    disguise exists to hide. Skipping our own copy left the base image's in
+    place, so the mode never actually removed it. ``RNG=N`` is the supported
+    control; ``VM=N`` drops the ``+hypervisor`` CPU bit the base image adds by
+    default.
+    """
+    monkeypatch.setattr(_compose_module.platform, "machine", lambda: arch)
+    monkeypatch.setattr(_config_module.platform, "machine", lambda: arch)
+    cfg = _cfg()
+    cfg.pod.disguise_hypervisor = True
+    cfg.pod.disguise_level = "max"
+
+    content = _build_compose_content(cfg)
+
+    assert 'RNG: "N"' in content
+    assert 'VM: "N"' in content
+    assert "virtio-rng" not in content, "no replacement RNG device"
+    assert "rng-random" not in content
 
 
 @pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
@@ -519,9 +564,12 @@ def test_compose_cpu_flags_invtsc_auto_profile_appends_when_supported(monkeypatc
     content = _build_compose_content(cfg)
     # +invtsc lands in CPU_FLAGS env now, not ARGUMENTS.
     assert 'CPU_FLAGS: "arch_capabilities=off,+invtsc"' in content
-    # virtio-rng -device pair stays in ARGUMENTS (dockur doesn't add it).
-    assert "virtio-rng-pci,rng=rng0" in content
-    assert "rng-random,id=rng0,filename=/dev/urandom" in content
+    # The RNG device is no longer ours to add: qemus/qemu's config.sh emits one
+    # unconditionally, so a tuning profile that "applies virtio-rng" now just
+    # means "leave the base image's device alone" (#853).
+    assert "virtio-rng" not in content
+    assert "rng-random" not in content
+    assert 'RNG: "Y"' in content
     # We no longer emit hv-* explicitly -- dockur owns those via HV=Y.
     assert "hv-relaxed" not in content
     assert "hv-evmcs" not in content

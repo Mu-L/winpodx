@@ -72,6 +72,8 @@ name: "winpodx"
       CPU_FLAGS: "{cpu_flags}"
       VMX: "{vmx}"
       HV: "{hv}"
+      RNG: "{rng}"
+      VM: "{vm}"
       BALLOONING: "N"
       ARGUMENTS: "{qemu_arguments}"
       USER_PORTS: "{user_ports}"
@@ -264,35 +266,15 @@ def _qemu_arguments_for_host(cfg: Config | None = None) -> str:
 
     After the #287 refactor, CPU-related sub-flags (``arch_capabilities``,
     ``+invtsc``, etc.) live in the dedicated ``CPU_FLAGS`` env via
-    :func:`_cpu_flags_for_host`. ``ARGUMENTS`` carries only the QEMU
-    args that don't belong to ``-cpu`` -- currently the virtio-rng
-    device pair (entropy pool seed for fast first-boot CryptoAPI / TLS).
-
-    aarch64 skips the virtio-rng tuning (dockur picks the right device list
-    itself) but still gets device-passthrough args — those are arch-independent.
+    :func:`_cpu_flags_for_host`, and since #853 the RNG device belongs to the
+    base image (see :func:`_rng_env`). What is left here are the QEMU args that
+    have no env of their own: host device passthrough and the disguise's
+    SMBIOS / ACPI table injection.
     """
     if cfg is None:
         return ""
 
     extra_args: list[str] = []
-
-    # CPU/entropy tuning — x86_64 only.
-    if platform.machine() != "aarch64":
-        from winpodx.utils.specs import detect_tuning_capability, recommend_tuning_profile
-
-        cap = detect_tuning_capability(vm_cpu_cores=cfg.pod.cpu_cores, vm_ram_gb=cfg.pod.ram_gb)
-        profile = recommend_tuning_profile(cap, user_pref=cfg.pod.tuning_profile)
-        # Skip the virtio-rng device at the max disguise level — it's a virtio
-        # (VEN_1AF4) PCI device, which would re-add the very ID max is removing.
-        if profile.apply_virtio_rng and not cfg.pod.disguise_max:
-            extra_args.extend(
-                [
-                    "-device",
-                    "virtio-rng-pci,rng=rng0",
-                    "-object",
-                    "rng-random,id=rng0,filename=/dev/urandom",
-                ]
-            )
 
     # Host device passthrough (#286). Device ids are hex-validated by config,
     # so no YAML/shell-dangerous chars reach the ARGUMENTS scalar.
@@ -341,6 +323,28 @@ def _qemu_arguments_for_host(cfg: Config | None = None) -> str:
 # any value above 1 reads as rotational to Windows.
 _DISK_ROTATION_SSD: Final = "1"
 _DISK_ROTATION_HDD: Final = "7200"
+
+
+def _rng_env(cfg: Config) -> str:
+    """``RNG:`` env -- ``N`` only at max disguise.
+
+    qemus/qemu's src/config.sh adds ``rng-random`` + ``virtio-rng-pci`` unless
+    this is disabled, so the base image already gives every guest exactly one
+    RNG. WinPodX used to append a second one of its own; worse, max disguise
+    merely skipped *our* copy and left the base image's virtio (VEN_1AF4)
+    device in place, which is the very ID that mode exists to hide (#853).
+    """
+    return "N" if cfg.pod.disguise_max else "Y"
+
+
+def _vm_env(cfg: Config) -> str:
+    """``VM:`` env -- the base image's "hypervisor CPU bit" switch.
+
+    dockur defaults it to ``Y`` and appends ``+hypervisor`` to CPU_FEATURES.
+    Max disguise turns it off at the source instead of relying solely on our
+    ``-hypervisor`` CPU sub-flag winning the last-one-wins race (#853).
+    """
+    return "N" if cfg.pod.disguise_max else "Y"
 
 
 def _disk_rotation(cfg: Config) -> str:
@@ -950,6 +954,8 @@ def _build_compose_content(cfg: Config) -> str:
         network_env=network_env,
         vga=vga,
         hv=hv,
+        rng=_rng_env(cfg),
+        vm=_vm_env(cfg),
         user=_yaml_escape(cfg.rdp.user),
         password=_yaml_escape(password),
         home=str(Path.home()),

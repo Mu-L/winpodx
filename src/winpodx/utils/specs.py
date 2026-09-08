@@ -148,9 +148,11 @@ class TuningProfile:
     #     reenlightenment, tlbflush, ipi, spinlocks=0x1fff, stimer,
     #     stimer-direct) + the -no-hpet QEMU machine arg. Always safe on
     #     Windows guests; significant scheduling / timer wins.
-    #   apply_virtio_rng -- expose virtio-rng-pci backed by /dev/urandom
-    #     so Windows entropy pool fills quickly on first boot (avoids
-    #     CryptoAPI / TLS handshake stalls).
+    #   apply_virtio_rng -- the guest gets a virtio-rng-pci backed by
+    #     /dev/urandom so its entropy pool fills quickly on first boot
+    #     (avoids CryptoAPI / TLS handshake stalls). Since #853 the device
+    #     comes from the base image rather than from us, so this reports the
+    #     profile's intent; only max disguise actually turns it off (RNG=N).
     #   apply_evmcs -- Intel-only nested-VMCS optimisation; no-op overhead
     #     when guest isn't running nested VMs but speeds them up when it
     #     is.
