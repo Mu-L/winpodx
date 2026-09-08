@@ -140,22 +140,41 @@ def test_compose_cpu_flags_x86_64(monkeypatch):
     assert 'CPU_FLAGS: "arch_capabilities=off"' in content
 
 
-def test_compose_ssd_emulation_off_by_default(monkeypatch):
-    monkeypatch.setattr(_compose_module.platform, "machine", lambda: "x86_64")
-    monkeypatch.setattr(_config_module.platform, "machine", lambda: "x86_64")
-    content = _build_compose_content(_cfg())
-    assert "rotation_rate" not in content
+@pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
+def test_compose_hdd_mode_declares_a_rotational_disk(monkeypatch, arch):
+    """#855: ``pod.ssd = False`` must produce a *rotational* guest disk.
+
+    dockur owns the rotation contract: ``DISK_ROTATION`` defaults to ``1``
+    (qemus/qemu ``src/disk.sh``) and is applied per device as
+    ``rotation_rate=$DISK_ROTATION`` on both ``ide-hd`` and ``scsi-hd``.
+    Emitting nothing therefore leaves the guest seeing an SSD even though
+    the user asked for a spinning disk, and our old ``-global`` overrides
+    could not correct it: an explicit per-device property beats ``-global``.
+    """
+    monkeypatch.setattr(_compose_module.platform, "machine", lambda: arch)
+    monkeypatch.setattr(_config_module.platform, "machine", lambda: arch)
+    cfg = _cfg()
+    cfg.pod.ssd = False
+
+    content = _build_compose_content(cfg)
+
+    assert 'DISK_ROTATION: "7200"' in content
+    assert "rotation_rate" not in content, "raw -global overrides must not fight DISK_ROTATION"
 
 
-def test_compose_ssd_emulation_injects_rotation_rate(monkeypatch):
-    # #606: pod.ssd -> -global <driver>.rotation_rate=1 so Windows sees an SSD.
-    monkeypatch.setattr(_compose_module.platform, "machine", lambda: "x86_64")
-    monkeypatch.setattr(_config_module.platform, "machine", lambda: "x86_64")
+@pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
+def test_compose_ssd_mode_declares_a_non_rotational_disk(monkeypatch, arch):
+    # #606 / #855: pod.ssd -> DISK_ROTATION=1 so Windows enables TRIM and
+    # skips scheduled defrag.
+    monkeypatch.setattr(_compose_module.platform, "machine", lambda: arch)
+    monkeypatch.setattr(_config_module.platform, "machine", lambda: arch)
     cfg = _cfg()
     cfg.pod.ssd = True
+
     content = _build_compose_content(cfg)
-    assert "ide-hd.rotation_rate=1" in content
-    assert "scsi-hd.rotation_rate=1" in content
+
+    assert 'DISK_ROTATION: "1"' in content
+    assert "rotation_rate" not in content
 
 
 def test_compose_cpu_flags_aarch64(monkeypatch):

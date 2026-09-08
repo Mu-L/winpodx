@@ -11,6 +11,7 @@ import shutil
 import string
 import tempfile
 from pathlib import Path
+from typing import Final
 
 from winpodx.core.agent import AGENT_PORT
 from winpodx.core.config import Config
@@ -56,6 +57,7 @@ name: "winpodx"
       RAM_SIZE: "{ram}G"
       CPU_CORES: "{cpu}"
       DISK_SIZE: "{disk_size}"
+      DISK_ROTATION: "{disk_rotation}"
       DISK_TYPE: "{disk_type}"
       USERNAME: "{user}"
       PASSWORD: "{password}"
@@ -326,19 +328,24 @@ def _qemu_arguments_for_host(cfg: Config | None = None) -> str:
         # the disguise image.
         extra_args += ["-acpitable", "file=/usr/share/qemu/winpodx-wsmt.aml"]
 
-    # SSD emulation (#606): make the guest disk report as non-rotational so
-    # Windows enables TRIM + skips scheduled defrag and treats it as an SSD
-    # (the Proxmox "SSD emulation" checkbox). `-global <driver>.rotation_rate=1`
-    # sets the property on whichever ATA/SCSI disk device dockur creates; QEMU
-    # ignores a `-global` whose driver isn't instantiated (non-fatal), so it's
-    # safe to set both regardless of the DISK_TYPE bus in use. virtio-blk has no
-    # rotation concept, so this is a no-op there. Disguise-safe: no bus change,
-    # so the disguise's INQUIRY model masking is untouched.
-    if cfg.pod.ssd:
-        extra_args += ["-global", "ide-hd.rotation_rate=1"]
-        extra_args += ["-global", "scsi-hd.rotation_rate=1"]
-
     return " ".join(extra_args)
+
+
+# dockur owns the rotation contract: qemus/qemu's src/disk.sh defaults
+# DISK_ROTATION to "1" and stamps it on each disk as
+# `rotation_rate=$DISK_ROTATION` for both ide-hd and scsi-hd. That per-device
+# property beats a `-global`, so the `-global <driver>.rotation_rate=1` we used
+# to emit for #606 never actually decided anything -- and because dockur's
+# default is 1, `pod.ssd = False` still gave the guest a non-rotational disk
+# (#855). Drive the env instead. 7200 is the conventional rpm for "spinning";
+# any value above 1 reads as rotational to Windows.
+_DISK_ROTATION_SSD: Final = "1"
+_DISK_ROTATION_HDD: Final = "7200"
+
+
+def _disk_rotation(cfg: Config) -> str:
+    """``DISK_ROTATION`` for the guest disk: SSD when ``pod.ssd`` else HDD."""
+    return _DISK_ROTATION_SSD if cfg.pod.ssd else _DISK_ROTATION_HDD
 
 
 def _host_dmi_field(name: str) -> str | None:
@@ -935,6 +942,7 @@ def _build_compose_content(cfg: Config) -> str:
         container_name=_yaml_escape(cfg.pod.container_name),
         image=_yaml_escape(image),
         disk_size=_yaml_escape(_disguise_disk_size(cfg)),
+        disk_rotation=_disk_rotation(cfg),
         disk_type=disk_type,
         adapter=adapter,
         mtu=mtu,
