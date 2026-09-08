@@ -21,6 +21,7 @@ from winpodx.core.devices import (
     qemu_device_args,
 )
 from winpodx.core.guest_disk import GUEST_SMB_PORT, SMB_HOST_PORT
+from winpodx.utils.btrfs import host_storage_is_ssd
 from winpodx.utils.paths import bundle_dir, config_dir
 
 # Two storage-volume modes are now supported (v0.4.x post-#122):
@@ -57,8 +58,7 @@ name: "winpodx"
       RAM_SIZE: "{ram}G"
       CPU_CORES: "{cpu}"
       DISK_SIZE: "{disk_size}"
-      DISK_ROTATION: "{disk_rotation}"
-      DISK_TYPE: "{disk_type}"
+{disk_rotation_env}      DISK_TYPE: "{disk_type}"
       USERNAME: "{user}"
       PASSWORD: "{password}"
       HOME: "{home}"
@@ -347,8 +347,31 @@ def _vm_env(cfg: Config) -> str:
     return "N" if cfg.pod.disguise_max else "Y"
 
 
-def _disk_rotation(cfg: Config) -> str:
-    """``DISK_ROTATION`` for the guest disk: SSD when ``pod.ssd`` else HDD."""
+def _disk_rotation_env(cfg: Config) -> str:
+    """Rendered ``DISK_ROTATION:`` line, or an empty string to omit it."""
+    rotation = _disk_rotation(cfg)
+    if rotation is None:
+        return ""
+    return f'      DISK_ROTATION: "{rotation}"\n'
+
+
+def _disk_rotation(cfg: Config) -> str | None:
+    """``DISK_ROTATION`` for the guest disk, or ``None`` to leave it unset.
+
+    ``pod.ssd`` is tri-state: ``True``/``False`` are explicit user choices, and
+    ``None`` (the default) asks the host what its own storage is. When the host
+    cannot be mapped to a single disk -- a span across mixed media, a network
+    source -- there is no honest answer, so the env is omitted and the base
+    image's own default applies.
+    """
+    if cfg.pod.ssd is None:
+        from winpodx.utils.paths import data_dir
+
+        target = Path(cfg.pod.storage_path).expanduser() if cfg.pod.storage_path else data_dir()
+        detected = host_storage_is_ssd(target)
+        if detected is None:
+            return None
+        return _DISK_ROTATION_SSD if detected else _DISK_ROTATION_HDD
     return _DISK_ROTATION_SSD if cfg.pod.ssd else _DISK_ROTATION_HDD
 
 
@@ -946,7 +969,7 @@ def _build_compose_content(cfg: Config) -> str:
         container_name=_yaml_escape(cfg.pod.container_name),
         image=_yaml_escape(image),
         disk_size=_yaml_escape(_disguise_disk_size(cfg)),
-        disk_rotation=_disk_rotation(cfg),
+        disk_rotation_env=_disk_rotation_env(cfg),
         disk_type=disk_type,
         adapter=adapter,
         mtu=mtu,

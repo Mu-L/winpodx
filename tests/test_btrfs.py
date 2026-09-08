@@ -239,3 +239,64 @@ class TestHostStorageIsSsd:
     def test_none_when_findmnt_missing(self, tmp_path, monkeypatch):
         self._patch(monkeypatch, source="/dev/sda1", has_findmnt=False)
         assert btrfs.host_storage_is_ssd(tmp_path) is None
+
+
+class TestHostStorageIsSsdDeviceMapper:
+    """#855: an LVM / device-mapper source must still resolve to a real disk.
+
+    `findmnt` reports `/dev/mapper/<name>` for the very common LVM and
+    LUKS layouts, which the probe used to give up on. That made SSD
+    detection return None on a large share of desktops, so the guest fell
+    back to the rotational default even on NVMe.
+    """
+
+    def _sysfs(self, tmp_path, chain: dict[str, list[str]], rotational: dict[str, str]):
+        for dm, slaves in chain.items():
+            slave_dir = tmp_path / "sys" / "block" / dm / "slaves"
+            slave_dir.mkdir(parents=True)
+            for s in slaves:
+                (slave_dir / s).mkdir()
+        for disk, val in rotational.items():
+            q = tmp_path / "sys" / "block" / disk / "queue"
+            q.mkdir(parents=True)
+            (q / "rotational").write_text(val + "\n")
+        return tmp_path
+
+    def _patch(self, monkeypatch, tmp_path, source: str, dm_target: str | None = None):
+        monkeypatch.setattr(btrfs.shutil, "which", lambda _n: "/usr/bin/findmnt")
+        monkeypatch.setattr(btrfs, "_run", lambda _cmd: (0, source, ""))
+        monkeypatch.setattr(btrfs, "_SYS_BLOCK", tmp_path / "sys" / "block")
+        if dm_target is not None:
+            monkeypatch.setattr(
+                btrfs, "_resolve_dm_name", lambda name, _t=dm_target: _t if name else None
+            )
+
+    def test_lvm_on_nvme_resolves_to_ssd(self, monkeypatch, tmp_path):
+        self._sysfs(
+            tmp_path,
+            {"dm-1": ["dm-0"], "dm-0": ["nvme0n1p2"]},
+            {"nvme0n1": "0"},
+        )
+        self._patch(monkeypatch, tmp_path, "/dev/mapper/system-root[/@/home]", "dm-1")
+
+        assert btrfs.host_storage_is_ssd(tmp_path) is True
+
+    def test_lvm_on_spinning_disk_resolves_to_hdd(self, monkeypatch, tmp_path):
+        self._sysfs(tmp_path, {"dm-0": ["sda2"]}, {"sda": "1"})
+        self._patch(monkeypatch, tmp_path, "/dev/mapper/vg-root", "dm-0")
+
+        assert btrfs.host_storage_is_ssd(tmp_path) is False
+
+    def test_btrfs_subvolume_suffix_is_stripped_before_lookup(self, monkeypatch, tmp_path):
+        # findmnt reports "/dev/mapper/system-root[/@/home]" on a btrfs
+        # subvolume; the bracket is not part of the device name.
+        self._sysfs(tmp_path, {"dm-1": ["nvme0n1p2"]}, {"nvme0n1": "0"})
+        self._patch(monkeypatch, tmp_path, "/dev/mapper/system-root[/@/home]", "dm-1")
+
+        assert btrfs.host_storage_is_ssd(tmp_path) is True
+
+    def test_mixed_backing_devices_stay_undecidable(self, monkeypatch, tmp_path):
+        self._sysfs(tmp_path, {"dm-0": ["nvme0n1p1", "sda1"]}, {"nvme0n1": "0", "sda": "1"})
+        self._patch(monkeypatch, tmp_path, "/dev/mapper/raid-root", "dm-0")
+
+        assert btrfs.host_storage_is_ssd(tmp_path) is None

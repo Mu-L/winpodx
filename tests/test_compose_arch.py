@@ -185,6 +185,43 @@ def test_compose_max_disguise_turns_the_base_rng_off(monkeypatch, arch):
     assert "rng-random" not in content
 
 
+def test_compose_disk_rotation_follows_the_host_when_unset(monkeypatch):
+    """#855: an unset ``pod.ssd`` tracks the host's own storage.
+
+    Detection returns None on layouts it cannot map to one disk, and the old
+    default then silently declared a spinning disk. Auto means auto: ask the
+    host, and only fall back to the base image's own default when the host
+    cannot answer.
+    """
+    monkeypatch.setattr(_compose_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(_config_module.platform, "machine", lambda: "x86_64")
+    cfg = _cfg()
+    cfg.pod.ssd = None
+
+    monkeypatch.setattr(_compose_module, "host_storage_is_ssd", lambda _p: True)
+    assert 'DISK_ROTATION: "1"' in _build_compose_content(cfg)
+
+    monkeypatch.setattr(_compose_module, "host_storage_is_ssd", lambda _p: False)
+    assert 'DISK_ROTATION: "7200"' in _build_compose_content(cfg)
+
+    # Undecidable host: leave the env off and let the base image decide.
+    monkeypatch.setattr(_compose_module, "host_storage_is_ssd", lambda _p: None)
+    assert "DISK_ROTATION" not in _build_compose_content(cfg)
+
+
+def test_compose_explicit_ssd_setting_overrides_host_detection(monkeypatch):
+    monkeypatch.setattr(_compose_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(_config_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(_compose_module, "host_storage_is_ssd", lambda _p: True)
+    cfg = _cfg()
+
+    cfg.pod.ssd = False
+    assert 'DISK_ROTATION: "7200"' in _build_compose_content(cfg)
+
+    cfg.pod.ssd = True
+    assert 'DISK_ROTATION: "1"' in _build_compose_content(cfg)
+
+
 @pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
 def test_compose_hdd_mode_declares_a_rotational_disk(monkeypatch, arch):
     """#855: ``pod.ssd = False`` must produce a *rotational* guest disk.

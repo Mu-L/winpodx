@@ -112,6 +112,9 @@ def detect_path_fs(path: Path) -> str:
     return stdout.strip().lower()
 
 
+_SYS_BLOCK = Path("/sys/block")
+
+
 def host_storage_is_ssd(path: Path) -> bool | None:
     """Best-effort: is the block device backing ``path`` non-rotational (SSD)?
 
@@ -144,18 +147,49 @@ def host_storage_is_ssd(path: Path) -> bool | None:
     # btrfs multi-device list) is too ambiguous to map to one rotational flag.
     if rc != 0 or not source.startswith("/dev/") or "," in source or " " in source:
         return None
+    # findmnt appends the btrfs subvolume as "/dev/x[/@/home]"; the device is
+    # everything before that bracket.
+    bracket = source.find("[")
+    if bracket != -1:
+        source = source[:bracket]
     dev = source[len("/dev/") :]
-    if "/" in dev:  # e.g. /dev/mapper/... -> "mapper/..."
+    if dev.startswith("mapper/"):
+        # LVM / LUKS / plain dm: findmnt names the mapper alias, so follow the
+        # symlink to its dm-N node and walk the slaves chain down to real
+        # disks. This layout is common enough on desktops that giving up here
+        # left SSD detection undecided on a large share of hosts (#855).
+        dm = _resolve_dm_name(dev[len("mapper/") :])
+        if dm is None:
+            return None
+        dev = dm
+    if "/" in dev:
         return None
-    # Strip the partition suffix to the parent disk: sda3 -> sda,
-    # nvme0n1p2 -> nvme0n1, mmcblk0p1 -> mmcblk0.
+    if dev.startswith("dm-"):
+        return _rotational_of_dm(dev)
+    return _rotational_of_disk(_parent_disk(dev))
+
+
+def _parent_disk(dev: str) -> str:
+    """Strip a partition suffix: sda3 -> sda, nvme0n1p2 -> nvme0n1."""
     import re
 
-    disk = re.sub(r"p?\d+$", "", dev) if re.search(r"\d", dev) else dev
     if re.match(r"^(nvme|mmcblk)", dev):
-        disk = re.sub(r"p\d+$", "", dev)
+        return re.sub(r"p\d+$", "", dev)
+    return re.sub(r"\d+$", "", dev) if re.search(r"\d", dev) else dev
+
+
+def _resolve_dm_name(name: str) -> str | None:
+    """Map a ``/dev/mapper/<name>`` alias to its ``dm-N`` kernel node."""
     try:
-        val = Path(f"/sys/block/{disk}/queue/rotational").read_text().strip()
+        target = (Path("/dev/mapper") / name).resolve().name
+    except OSError:
+        return None
+    return target if target.startswith("dm-") else None
+
+
+def _rotational_of_disk(disk: str) -> bool | None:
+    try:
+        val = (_SYS_BLOCK / disk / "queue" / "rotational").read_text().strip()
     except OSError:
         return None
     if val == "0":
@@ -163,6 +197,30 @@ def host_storage_is_ssd(path: Path) -> bool | None:
     if val == "1":
         return False
     return None
+
+
+def _rotational_of_dm(dm: str, _depth: int = 0) -> bool | None:
+    """Rotational flag for a dm node, resolved through its slaves.
+
+    A dm target can stack (LUKS on LVM on a partition) and can span several
+    disks. Recurse through the stack and only answer when every backing disk
+    agrees -- a mixed SSD/HDD span has no single honest answer.
+    """
+    if _depth > 8:
+        return None
+    try:
+        slaves = sorted(p.name for p in (_SYS_BLOCK / dm / "slaves").iterdir())
+    except OSError:
+        return None
+    verdicts = set()
+    for slave in slaves:
+        if slave.startswith("dm-"):
+            verdicts.add(_rotational_of_dm(slave, _depth + 1))
+        else:
+            verdicts.add(_rotational_of_disk(_parent_disk(slave)))
+    if len(verdicts) != 1:
+        return None
+    return verdicts.pop()
 
 
 def is_cow_disabled(path: Path) -> bool | None:

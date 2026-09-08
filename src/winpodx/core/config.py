@@ -319,9 +319,11 @@ class PodConfig:
     # SSD (the Proxmox "SSD emulation" checkbox). Disguise-safe: it keeps the
     # current disk bus + the disguise's INQUIRY model masking, and a
     # non-rotational disk is *more* bare-metal-realistic on modern hardware.
-    # Auto-set from the host storage device at setup; override with
+    # Tri-state: None (default) re-asks the host on every pod create, so a
+    # migrated disk or a new storage_path is picked up without touching the
+    # config; True/False are explicit user overrides set with
     # `winpodx config set pod.ssd true|false`. Takes effect on next pod create.
-    ssd: bool = False
+    ssd: bool | None = None
     # v0.5.x: guest sync. After a host upgrade, push the refreshed guest
     # artifacts (agent.ps1, urlacl, rdprrap/shim, registry fixes) into the
     # running guest instead of forcing a wipe-reinstall. Auto-runs once per
@@ -591,8 +593,17 @@ class PodConfig:
                 self.disk_max_size = ""
         if not isinstance(self.guest_autosync, bool):
             self.guest_autosync = True
-        if not isinstance(self.ssd, bool):
-            self.ssd = bool(self.ssd)
+        # A persisted `ssd = false` is indistinguishable from the pre-0.11.1
+        # default, and that default never actually produced a rotational disk
+        # (dockur's DISK_ROTATION defaults to 1, and our old `-global` override
+        # lost to its per-device property). Treating a stored False as "auto"
+        # therefore preserves the behaviour those users have been getting,
+        # while an explicit True still forces SSD. Anything non-boolean is
+        # auto as well.
+        if self.ssd is not None and not isinstance(self.ssd, bool):
+            self.ssd = None
+        if self.ssd is False:
+            self.ssd = None
         # storage_path: keep empty (named-volume mode) or coerce to a
         # safe absolute string under the user's home or under a known
         # winpodx-managed root. The caller responsible for materialising
