@@ -1279,6 +1279,25 @@ class TestPodReset:
         assert calls["provisioned"] is True
         assert "Reset complete" in capsys.readouterr().out
 
+    def test_the_subcommand_is_actually_wired_to_reset(self, monkeypatch):
+        """Guard the dispatch itself, not just the helper.
+
+        The other tests call ``_reset`` directly, so a missing or misspelled
+        ``pod_command`` branch would leave `winpodx pod reset` doing nothing
+        while the suite stayed green.
+        """
+        import argparse as _a
+
+        from winpodx.cli import pod as pod_cli
+
+        calls = {}
+        monkeypatch.setattr(pod_cli, "_recreate", lambda **kw: calls.update(recreate=kw))
+        monkeypatch.setattr("winpodx.cli.main._cmd_provision", lambda _a: 0)
+
+        pod_cli.handle_pod(_a.Namespace(pod_command="reset", redownload_iso=False, yes=True))
+
+        assert calls["recreate"]["wipe_storage"] is True
+
     def test_redownload_iso_drops_the_cached_image(self, monkeypatch):
         from winpodx.cli import pod as pod_cli
 
