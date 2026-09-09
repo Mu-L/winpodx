@@ -177,6 +177,30 @@ def cli(argv: list[str] | None = None) -> None:
             "Use this for a clean reinstall without the download."
         ),
     )
+    reset_p = pod_sub.add_parser(
+        "reset",
+        help=(
+            "Start the Windows guest over from scratch: destroy the disk, "
+            "reinstall Windows, then re-run the whole provisioning chain "
+            "(apply-fixes, app discovery, reverse-open). Your winpodx "
+            "configuration and app profiles are kept -- only the guest is "
+            "reset. Reuses the cached ISO by default, so no multi-GB "
+            "re-download."
+        ),
+    )
+    reset_p.add_argument(
+        "--redownload-iso",
+        action="store_true",
+        help=(
+            "Also delete the cached Windows ISO and fetch it again from "
+            "Microsoft. Only needed when the cached ISO itself is suspect."
+        ),
+    )
+    reset_p.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the confirmation prompt. Intended for scripts.",
+    )
     pod_sub.add_parser(
         "apply-fixes",
         help=(

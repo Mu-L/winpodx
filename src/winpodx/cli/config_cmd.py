@@ -28,6 +28,43 @@ _RECREATE_ON_CHANGE = frozenset(
 _WIPE_ON_CHANGE = frozenset({"win_version"})
 
 
+def _warn_if_disguise_image_stale(cfg) -> None:  # type: ignore[no-untyped-def]
+    """Warn when the local patched image was built on an older dockur.
+
+    `disguise build-image` bakes `FROM $DOCKUR_IMAGE` at build time, so an
+    image built before the pin moved still boots the guest on that older
+    dockur. The older dockur does not recognise the newer one's on-disk
+    markers, so it reinstalls Windows from scratch -- the guest is destroyed
+    with no warning of its own. Stay silent unless we are sure (see
+    ``disguise_image_is_stale``); a false alarm costs a 20-40 minute rebuild.
+    """
+    try:
+        from winpodx.cli.disguise import (
+            _image_label_version,
+            disguise_image_is_stale,
+            expected_dockur_version,
+        )
+
+        if disguise_image_is_stale(cfg) is not True:
+            return
+        backend = cfg.pod.backend if cfg.pod.backend in ("podman", "docker") else "podman"
+        tag = (cfg.pod.disguise_image or "").strip() or "localhost/winpodx-windows-disguise:latest"
+        built_on = _image_label_version(backend, tag) or "?"
+        expected = expected_dockur_version() or "?"
+    except Exception:  # noqa: BLE001 -- a warning must never break `config set`
+        return
+    print(
+        tr(
+            "WARNING: the patched image was built on dockur {built_on} but the "
+            "current pin is {expected}. Booting the guest on the older dockur "
+            "makes it reinstall Windows from scratch, DESTROYING the existing "
+            "install. Rebuild first:\n"
+            "  winpodx disguise build-image"
+        ).format(built_on=built_on, expected=expected),
+        file=sys.stderr,
+    )
+
+
 def _apply_compose_change(cfg: Any) -> None:
     """Regenerate compose for *cfg* and apply it to the pod right away (#246).
 
@@ -185,6 +222,9 @@ def _set(key: str, value: str | None, *, auto: bool = False) -> None:
 
     # Apply compose-affecting changes immediately (no manual recreate needed),
     # matching the GUI's Save behaviour.
+    if not auto and section == "pod" and field == "disguise_level" and coerced == "max":
+        _warn_if_disguise_image_stale(cfg)
+
     if not auto and section == "pod" and field in _RECREATE_ON_CHANGE:
         from winpodx.core.config import disguise_changes_devices
 

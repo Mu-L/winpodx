@@ -83,6 +83,73 @@ def _qemu_version(backend: str, image: str) -> str:
     return m.group(1) if m else ""
 
 
+def expected_dockur_version() -> str | None:
+    """The dockur version the current pin corresponds to, from VERSIONS.txt.
+
+    ``config/oem/VERSIONS.txt`` is what the weekly upstream watcher updates, so
+    it is the one place that already tracks the pinned dockur release.
+    """
+    from winpodx.utils.paths import bundle_dir
+
+    base = bundle_dir()
+    if base is None:
+        return None
+    try:
+        text = (Path(base) / "config" / "oem" / "VERSIONS.txt").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        key, _, value = line.partition("=")
+        if key.strip() == "dockur":
+            return value.strip().lstrip("v") or None
+    return None
+
+
+def _image_label_version(backend: str, image: str) -> str | None:
+    """``org.opencontainers.image.version`` of a local image, if readable."""
+    try:
+        proc = subprocess.run(
+            [
+                backend,
+                "image",
+                "inspect",
+                image,
+                "--format",
+                '{{index .Config.Labels "org.opencontainers.image.version"}}',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    value = proc.stdout.strip()
+    return value.lstrip("v") or None
+
+
+def disguise_image_is_stale(cfg) -> bool | None:  # type: ignore[no-untyped-def]
+    """Is the local patched image built on an older dockur than the pin?
+
+    Returns ``True`` (stale -- switching to it would make dockur reinstall the
+    guest), ``False`` (current), or ``None`` when there is nothing to compare:
+    no image built, or either version unreadable. ``None`` must stay silent --
+    a false alarm here would push people into a needless 20-40 minute rebuild.
+    """
+    tag = (getattr(cfg.pod, "disguise_image", "") or "").strip()
+    if not tag:
+        if not disguise_image_present(cfg):
+            return None
+        tag = _DISGUISE_TAG
+    backend = cfg.pod.backend if cfg.pod.backend in ("podman", "docker") else "podman"
+    built_on = _image_label_version(backend, tag)
+    expected = expected_dockur_version()
+    if not built_on or not expected:
+        return None
+    return built_on != expected
+
+
 def disguise_image_present(cfg) -> bool:  # type: ignore[no-untyped-def]
     """True if the patched-QEMU disguise image already exists locally.
 

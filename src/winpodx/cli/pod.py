@@ -38,6 +38,11 @@ def handle_pod(args: argparse.Namespace) -> None:
             wipe_storage=getattr(args, "wipe_storage", False) or keep_iso,
             keep_iso=keep_iso,
         )
+    elif cmd == "reset":
+        _reset(
+            redownload_iso=getattr(args, "redownload_iso", False),
+            assume_yes=getattr(args, "yes", False),
+        )
     elif cmd == "wait-ready":
         _wait_ready(args.timeout, getattr(args, "logs", False), getattr(args, "verbose", False))
     # --- deprecated aliases: guest-side operations ---
@@ -711,7 +716,61 @@ def _restart() -> None:
         sys.exit(1)
 
 
-def _recreate(*, wipe_storage: bool, keep_iso: bool = False) -> None:
+def _reset(*, redownload_iso: bool = False, assume_yes: bool = False) -> None:
+    """Start the guest over: wipe the disk, reinstall, re-run provisioning.
+
+    ``recreate --wipe-storage`` already destroys the disk, but it stops once
+    the container is up: the guest still needs apply-fixes, app discovery and
+    reverse-open before it is usable, and finding that out is on the user.
+    This is the one command for "my guest is broken, give me a clean one" --
+    it keeps the winpodx config and the app profiles, so only the guest is
+    reset.
+
+    The ISO is kept by default; re-downloading 5-8 GB is rarely what a reset
+    is for.
+    """
+    if not assume_yes:
+        print(
+            tr(
+                "This DESTROYS the Windows disk and everything installed in it, "
+                "then reinstalls Windows and re-runs provisioning.\n"
+                "Your winpodx settings and app profiles are kept.\n"
+                "Type 'RESET' to confirm: "
+            ),
+            end="",
+            flush=True,
+        )
+        try:
+            if input().strip() != "RESET":
+                print(tr("Aborted (no confirmation)."))
+                return
+        except (EOFError, KeyboardInterrupt):
+            print(tr("\nAborted."))
+            return
+
+    # keep_iso is the inverse of the user-facing --redownload-iso; _recreate
+    # takes the confirmation it would otherwise prompt for as already given.
+    _recreate(wipe_storage=True, keep_iso=not redownload_iso, assume_yes=True)
+
+    print(tr("\nRe-running provisioning on the fresh guest..."))
+    from winpodx.cli.main import _cmd_provision
+
+    args = argparse.Namespace(retries=5, timeout=3600, logs=False, verbose=False)
+    rc = _cmd_provision(args)
+    if rc == 0:
+        print(tr("Reset complete. The guest is provisioned and ready."))
+    else:
+        print(
+            tr(
+                "The guest was reinstalled but provisioning did not finish. "
+                "Run 'winpodx provision' to retry, or 'winpodx doctor' to see "
+                "what is missing."
+            ),
+            file=sys.stderr,
+        )
+
+
+def _recreate(*, wipe_storage: bool, keep_iso: bool = False, assume_yes: bool = False) -> None:
     """Regenerate compose.yaml + destroy and re-create the container (#254).
 
     Differs from ``_restart`` in two ways:
@@ -750,14 +809,19 @@ def _recreate(*, wipe_storage: bool, keep_iso: bool = False) -> None:
                 " Type 'WIPE' to confirm: "
             )
         )
-        print(warn_msg, end="", flush=True)
-        try:
-            answer = input().strip()
-        except EOFError:
-            answer = ""
-        if answer != "WIPE":
-            print(tr("Aborted (no confirmation)."))
-            sys.exit(2)
+        if assume_yes:
+            # `pod reset` already took an explicit RESET confirmation; asking
+            # twice for the same destruction just trains people to type past it.
+            print(tr("Wiping the Windows disk (confirmed)."))
+        else:
+            print(warn_msg, end="", flush=True)
+            try:
+                answer = input().strip()
+            except EOFError:
+                answer = ""
+            if answer != "WIPE":
+                print(tr("Aborted (no confirmation)."))
+                sys.exit(2)
 
     print(tr("Stopping pod..."))
     stop_pod(cfg)

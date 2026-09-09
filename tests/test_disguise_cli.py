@@ -12,6 +12,8 @@ import argparse
 
 import pytest
 
+from winpodx.cli import disguise
+
 
 class _FakeProc:
     """Minimal Popen stand-in: records the cmd, streams a couple of lines."""
@@ -385,3 +387,86 @@ def test_build_disguise_image_handles_popen_failure(monkeypatch, tmp_path):
     assert d.build_disguise_image(cfg, on_line=lines.append) is False
     assert lines[-1] == "disguise build: failed to start (podman)"
     assert cfg.pod.disguise_image == ""
+
+
+class TestDisguiseImageStaleness:
+    """#853 follow-up: a disguise image built against an older dockur wipes the guest.
+
+    ``winpodx disguise build-image`` bakes ``FROM $DOCKUR_IMAGE`` at build
+    time, so the patched image keeps whatever dockur it was built on. When the
+    pin later moves, switching to max boots the guest on the older dockur,
+    which does not recognise the newer image's on-disk markers and reinstalls
+    Windows from scratch -- silently destroying the guest.
+    """
+
+    def _cfg(self):
+        from winpodx.core.config import Config
+
+        cfg = Config()
+        cfg.pod.backend = "podman"
+        cfg.pod.disguise_image = disguise._DISGUISE_TAG
+        return cfg
+
+    def test_image_older_than_the_pin_is_stale(self, monkeypatch):
+        monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: "5.16")
+        monkeypatch.setattr(disguise, "expected_dockur_version", lambda: "6.05")
+
+        assert disguise.disguise_image_is_stale(self._cfg()) is True
+
+    def test_image_matching_the_pin_is_current(self, monkeypatch):
+        monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: "6.05")
+        monkeypatch.setattr(disguise, "expected_dockur_version", lambda: "6.05")
+
+        assert disguise.disguise_image_is_stale(self._cfg()) is False
+
+    def test_unknown_version_is_not_reported_as_stale(self, monkeypatch):
+        # Never cry wolf: an unreadable label must not trigger a scary warning.
+        monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: None)
+        monkeypatch.setattr(disguise, "expected_dockur_version", lambda: "6.05")
+
+        assert disguise.disguise_image_is_stale(self._cfg()) is None
+
+    def test_no_disguise_image_configured_is_not_stale(self, monkeypatch):
+        cfg = self._cfg()
+        cfg.pod.disguise_image = ""
+        monkeypatch.setattr(disguise, "disguise_image_present", lambda _c: False)
+
+        assert disguise.disguise_image_is_stale(cfg) is None
+
+    def test_expected_version_comes_from_the_versions_file(self):
+        # VERSIONS.txt is the tracker the upstream-watcher workflow updates.
+        assert disguise.expected_dockur_version() == "6.05"
+
+
+class TestStaleImageWarningOnMaxSwitch:
+    def _run_set(self, monkeypatch, capsys, stale):
+        from winpodx.cli import config_cmd
+
+        cfg = object()
+        monkeypatch.setattr(config_cmd, "tr", lambda s: s, raising=False)
+        monkeypatch.setattr(disguise, "disguise_image_is_stale", lambda _c: stale)
+        monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: "5.16")
+        monkeypatch.setattr(disguise, "expected_dockur_version", lambda: "6.05")
+
+        class _Pod:
+            backend = "podman"
+            disguise_image = disguise._DISGUISE_TAG
+
+        class _Cfg:
+            pod = _Pod()
+
+        cfg = _Cfg()
+        config_cmd._warn_if_disguise_image_stale(cfg)
+        return capsys.readouterr().err
+
+    def test_stale_image_warns_before_it_can_destroy_the_guest(self, monkeypatch, capsys):
+        err = self._run_set(monkeypatch, capsys, True)
+
+        assert "5.16" in err and "6.05" in err
+        assert "disguise build-image" in err
+
+    def test_current_image_stays_quiet(self, monkeypatch, capsys):
+        assert self._run_set(monkeypatch, capsys, False) == ""
+
+    def test_unknown_state_stays_quiet(self, monkeypatch, capsys):
+        assert self._run_set(monkeypatch, capsys, None) == ""

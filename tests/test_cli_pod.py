@@ -1242,3 +1242,73 @@ def test_grow_disk_reports_grow_error_and_partition_extension(
     )
     pod._grow_disk(target_size="96G", increment=None, extend_only=False, assume_yes=True)
     assert "C: extended to fill" in capsys.readouterr().out
+
+
+class TestPodReset:
+    """`pod reset`: one command for "give me a clean guest" (#866 follow-up).
+
+    `recreate --wipe-storage` already destroyed the disk, but it stopped once
+    the container was up -- the guest still needed apply-fixes, discovery and
+    reverse-open, and finding that out was left to the user.
+    """
+
+    def _args(self, **kw):
+        import argparse as _a
+
+        return _a.Namespace(**{"redownload_iso": False, "yes": True, **kw})
+
+    def test_reset_wipes_keeps_the_iso_and_then_provisions(self, monkeypatch, capsys):
+        from winpodx.cli import pod as pod_cli
+
+        calls = {}
+        monkeypatch.setattr(
+            pod_cli,
+            "_recreate",
+            lambda **kw: calls.update(recreate=kw),
+        )
+
+        def _provision(_a):
+            calls["provisioned"] = True
+            return 0
+
+        monkeypatch.setattr("winpodx.cli.main._cmd_provision", _provision)
+
+        pod_cli._reset(redownload_iso=False, assume_yes=True)
+
+        assert calls["recreate"] == {"wipe_storage": True, "keep_iso": True, "assume_yes": True}
+        assert calls["provisioned"] is True
+        assert "Reset complete" in capsys.readouterr().out
+
+    def test_redownload_iso_drops_the_cached_image(self, monkeypatch):
+        from winpodx.cli import pod as pod_cli
+
+        calls = {}
+        monkeypatch.setattr(pod_cli, "_recreate", lambda **kw: calls.update(recreate=kw))
+        monkeypatch.setattr("winpodx.cli.main._cmd_provision", lambda _a: 0)
+
+        pod_cli._reset(redownload_iso=True, assume_yes=True)
+
+        assert calls["recreate"]["keep_iso"] is False
+
+    def test_without_confirmation_nothing_is_destroyed(self, monkeypatch, capsys):
+        from winpodx.cli import pod as pod_cli
+
+        calls = {}
+        monkeypatch.setattr(pod_cli, "_recreate", lambda **kw: calls.update(recreate=kw))
+        monkeypatch.setattr("winpodx.cli.main._cmd_provision", lambda _a: 0)
+        monkeypatch.setattr("builtins.input", lambda: "yes")
+
+        pod_cli._reset(redownload_iso=False, assume_yes=False)
+
+        assert "recreate" not in calls
+        assert "Aborted" in capsys.readouterr().out
+
+    def test_failed_provisioning_is_reported_not_swallowed(self, monkeypatch, capsys):
+        from winpodx.cli import pod as pod_cli
+
+        monkeypatch.setattr(pod_cli, "_recreate", lambda **kw: None)
+        monkeypatch.setattr("winpodx.cli.main._cmd_provision", lambda _a: 1)
+
+        pod_cli._reset(redownload_iso=False, assume_yes=True)
+
+        assert "provisioning did not finish" in capsys.readouterr().err
