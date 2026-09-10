@@ -30,6 +30,27 @@ set -euo pipefail
 SRC="${1:-.}"
 cd "$SRC"
 
+# `sed -i` exits 0 even when nothing matched, so a QEMU version bump that moves
+# or renames any target below would silently produce a HALF-disguised image that
+# still builds and boots. Assert every substitution actually changed its file.
+psed() {  # psed <sed-script> <file>...
+    local script="$1"; shift
+    local f before after
+    for f in "$@"; do
+        before="$(cksum <"$f")"
+        sed -i "$script" "$f"
+        after="$(cksum <"$f")"
+        if [ "$before" = "$after" ]; then
+            echo "winpodx: PATCH TARGET MISSING in $f" >&2
+            echo "  sed: $script" >&2
+            echo "  QEMU ${QEMU_VERSION:-?} moved or renamed it." >&2
+            echo "  Update packaging/qemu-disguise/patch-strings.sh -- do NOT ship" >&2
+            echo "  a partially patched image." >&2
+            exit 1
+        fi
+    done
+}
+
 # Host-derived replacements (build-arg → env), with generic-real fallbacks.
 ACPI_OEM6="${ACPI_OEM6:-ALASKA}"
 ACPI_OEM8="${ACPI_OEM8:-A M I   }"
@@ -47,8 +68,8 @@ echo "  ACPI OEM6='${ACPI_OEM6}' OEM8='${ACPI_OEM8}' DISK='${DISK_MODEL}' DVD='$
 
 # --- ACPI OEM ID (6 bytes) + OEM Table ID (8 bytes) ---
 # QEMU defaults: ACPI_BUILD_APPNAME6 "BOCHS ", ACPI_BUILD_APPNAME8 "BXPC    ".
-sed -i "s/\"BOCHS \"/\"${ACPI_OEM6}\"/g" include/hw/acpi/aml-build.h
-sed -i "s/\"BXPC    \"/\"${ACPI_OEM8}\"/g" include/hw/acpi/aml-build.h
+psed "s/\"BOCHS \"/\"${ACPI_OEM6}\"/g" include/hw/acpi/aml-build.h
+psed "s/\"BXPC    \"/\"${ACPI_OEM8}\"/g" include/hw/acpi/aml-build.h
 
 # --- FADT rev6 "Hypervisor Vendor Identity" ---
 # build_fadt() hardcodes the 8-byte Hypervisor Vendor Identity field to "QEMU"
@@ -57,7 +78,7 @@ sed -i "s/\"BXPC    \"/\"${ACPI_OEM8}\"/g" include/hw/acpi/aml-build.h
 # host vendor (a non-VM string) so the FADT no longer announces a hypervisor.
 HV_ID="$(printf '%s' "$ACPI_OEM6" | tr -d ' ' | cut -c1-8)"
 [ -n "$HV_ID" ] || HV_ID="ALASKA"
-sed -i "s/build_append_padded_str(tbl, \"QEMU\", 8/build_append_padded_str(tbl, \"${HV_ID}\", 8/" \
+psed "s/build_append_padded_str(tbl, \"QEMU\", 8/build_append_padded_str(tbl, \"${HV_ID}\", 8/" \
     hw/acpi/aml-build.c
 
 # --- FADT Preferred_PM_Profile (FADT offset 45) ---
@@ -67,7 +88,7 @@ sed -i "s/build_append_padded_str(tbl, \"QEMU\", 8/build_append_padded_str(tbl, 
 # patches above never clear it. A real laptop reports 0x02 (Mobile); set it so
 # the field stops reading as the QEMU default. (The PM Profile is an OS power
 # hint, not a constraint, so Windows behaviour is unchanged.)
-sed -i 's|build_append_int_noprefix(tbl, 0 /\* Unspecified \*/, 1);|build_append_int_noprefix(tbl, 2 /* Mobile (winpodx) */, 1);|' \
+psed 's|build_append_int_noprefix(tbl, 0 /\* Unspecified \*/, 1);|build_append_int_noprefix(tbl, 2 /* Mobile (winpodx) */, 1);|' \
     hw/acpi/aml-build.c
 
 # --- ACPI device _HID strings (QEMU* -> host vendor prefix) ---
@@ -80,10 +101,10 @@ sed -i 's|build_append_int_noprefix(tbl, 0 /\* Unspecified \*/, 1);|build_append
 # ACPI ID form: leading letter), falling back to a neutral non-VM default.
 HID4="$(printf '%s' "$ACPI_OEM6" | tr -cd 'A-Za-z0-9' | tr 'a-z' 'A-Z' | cut -c1-4)"
 case "$HID4" in [A-Z]???) : ;; *) HID4="ACPI" ;; esac
-sed -i "s/aml_string(\"QEMU0002\")/aml_string(\"${HID4}0002\")/" \
+psed "s/aml_string(\"QEMU0002\")/aml_string(\"${HID4}0002\")/" \
     hw/nvram/fw_cfg-acpi.c hw/i386/fw_cfg.c
-sed -i "s/aml_string(\"QEMU0001\")/aml_string(\"${HID4}0001\")/" hw/misc/pvpanic-isa.c
-sed -i "s/aml_string(\"QEMUVGID\")/aml_string(\"${HID4}VGID\")/" hw/acpi/vmgenid.c
+psed "s/aml_string(\"QEMU0001\")/aml_string(\"${HID4}0001\")/" hw/misc/pvpanic-isa.c
+psed "s/aml_string(\"QEMUVGID\")/aml_string(\"${HID4}VGID\")/" hw/acpi/vmgenid.c
 
 # --- fw_cfg ACPI device name ("FWCF") ---
 # The fw_cfg ACPI device is named "FWCF" (aml_device("FWCF")) -- the one QEMU
@@ -91,7 +112,7 @@ sed -i "s/aml_string(\"QEMUVGID\")/aml_string(\"${HID4}VGID\")/" hw/acpi/vmgenid
 # 0.82 builds scan the DSDT for it, so rename the AML device node. Windows has
 # no fw_cfg driver and the firmware reaches fw_cfg through its I/O ports (not
 # the ACPI node), so the rename is cosmetic; the node has no by-name references.
-sed -i "s/aml_device(\"FWCF\")/aml_device(\"FWCG\")/" hw/nvram/fw_cfg-acpi.c hw/i386/fw_cfg.c
+psed "s/aml_device(\"FWCF\")/aml_device(\"FWCG\")/" hw/nvram/fw_cfg-acpi.c hw/i386/fw_cfg.c
 
 # --- WAET table signature ---
 # QEMU emits a WAET ("Windows ACPI Emulated devices Table") -- a table only
@@ -100,14 +121,14 @@ sed -i "s/aml_device(\"FWCF\")/aml_device(\"FWCG\")/" hw/nvram/fw_cfg-acpi.c hw/
 # ignores the now-unknown table; we lose only WAET's RTC/PM-timer read hint).
 # Done via the signature, not by dropping the call -- that would leave
 # build_waet() unused and fail QEMU's -Werror build.
-sed -i 's/\.sig = "WAET"/.sig = "WAFT"/' hw/i386/acpi-build.c
+psed 's/\.sig = "WAET"/.sig = "WAFT"/' hw/i386/acpi-build.c
 
 # --- Disk / optical model strings ---
 # ATA (ide-hd, used by DISK_TYPE=sata) + SCSI defaults report "QEMU HARDDISK"
 # / "QEMU DVD-ROM"; al-khaser scans Disk\Enum + IDE/SCSI for "QEMU".
-sed -i "s/\"QEMU HARDDISK\"/\"${DISK_MODEL}\"/g" hw/ide/core.c hw/scsi/scsi-disk.c
-sed -i "s/\"QEMU DVD-ROM\"/\"${DVD_MODEL}\"/g" hw/ide/core.c hw/ide/atapi.c
-sed -i "s/\"QEMU CD-ROM\"/\"${DVD_MODEL}\"/g" hw/scsi/scsi-disk.c
+psed "s/\"QEMU HARDDISK\"/\"${DISK_MODEL}\"/g" hw/ide/core.c hw/scsi/scsi-disk.c
+psed "s/\"QEMU DVD-ROM\"/\"${DVD_MODEL}\"/g" hw/ide/core.c hw/ide/atapi.c
+psed "s/\"QEMU CD-ROM\"/\"${DVD_MODEL}\"/g" hw/scsi/scsi-disk.c
 
 # --- ATAPI / SCSI INQUIRY vendor field ("QEMU") ---
 # Separate from the product/model patched above. hw/ide/atapi.c sets the 8-byte
@@ -119,7 +140,7 @@ sed -i "s/\"QEMU CD-ROM\"/\"${DVD_MODEL}\"/g" hw/scsi/scsi-disk.c
 # drive vendor) and the generic SCSI vendor to "ATA" (QEMU's own T10 default).
 DVD_VENDOR="$(printf '%s' "$DVD_MODEL" | awk '{print $1}')"
 [ -n "$DVD_VENDOR" ] || DVD_VENDOR="ASUS"
-sed -i "s/padstr8(buf + 8, 8, \"QEMU\")/padstr8(buf + 8, 8, \"${DVD_VENDOR}\")/" hw/ide/atapi.c
-sed -i "s/s->vendor = g_strdup(\"QEMU\")/s->vendor = g_strdup(\"ATA\")/" hw/scsi/scsi-disk.c
+psed "s/padstr8(buf + 8, 8, \"QEMU\")/padstr8(buf + 8, 8, \"${DVD_VENDOR}\")/" hw/ide/atapi.c
+psed "s/s->vendor = g_strdup(\"QEMU\")/s->vendor = g_strdup(\"ATA\")/" hw/scsi/scsi-disk.c
 
 echo "winpodx: identity-string patch applied (ACPI OEM + FADT HV vendor + _HIDs + WAET + disk model + INQUIRY vendor)."

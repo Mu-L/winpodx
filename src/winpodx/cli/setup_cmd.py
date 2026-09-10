@@ -8,6 +8,7 @@ import os
 import shutil
 from pathlib import Path
 
+from winpodx.cli.disguise import build_disguise_image, disguise_image_is_stale
 from winpodx.core.compose import (
     _build_compose_content,
     _build_compose_template,
@@ -194,6 +195,29 @@ def _update_image_pin() -> int:
     print(tr("New pin: {pin}").format(pin=pinned))
     cfg.pod.image = pinned
     cfg.save()
+
+    # Moving the pin strands the patched image on the OLD dockur, and booting
+    # that combination makes dockur reinstall Windows from scratch. This is the
+    # one place a rebuild belongs: the user explicitly asked to move the pin,
+    # unlike an app launch where a surprise 20-40 min compile is unacceptable.
+    if cfg.pod.disguise_max and disguise_image_is_stale(cfg) is True:
+        print(
+            tr(
+                "Hardened mode is on and the patched-QEMU image was built against "
+                "the previous dockur. Rebuilding it for the new pin -- this compiles "
+                "QEMU and takes ~20-40 minutes. Leaving it stale would make dockur "
+                "reinstall Windows from scratch on the next start."
+            )
+        )
+        if not build_disguise_image(cfg, on_line=print):
+            print(
+                tr(
+                    "FAIL: patched-image rebuild failed. The pin is now {pin}, but "
+                    "compose was NOT regenerated so the pod still runs the old one. "
+                    "Fix the build, then run `winpodx disguise build-image`."
+                ).format(pin=pinned)
+            )
+            return 3
 
     try:
         from winpodx.core.compose import generate_compose
