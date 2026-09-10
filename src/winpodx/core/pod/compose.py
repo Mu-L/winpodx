@@ -901,6 +901,11 @@ def _build_compose_content(cfg: Config) -> str:
             if disguise_image_present(cfg):
                 disguise_img = _DISGUISE_TAG
         if disguise_img:
+            # Fail closed on a confirmed base mismatch: emitting it here is what
+            # hands dockur a foreign disk and triggers a silent reinstall.
+            from winpodx.core.pod.disguise import validate_disguise_image
+
+            validate_disguise_image(cfg)
             image = disguise_img
     if cfg.pod.disguise_active and platform.machine() != "aarch64":
         blob_path = _write_disguise_smbios_blob(oem_dir)

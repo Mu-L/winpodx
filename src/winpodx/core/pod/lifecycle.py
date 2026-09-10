@@ -14,6 +14,17 @@ log = logging.getLogger(__name__)
 
 def start_pod(cfg: Config) -> PodStatus:
     """Start the Windows pod and wait up to boot_timeout for RDP readiness."""
+    # Authoritative gate: an existing compose.yaml is reused as-is, and tray /
+    # GUI / maintenance call start_pod directly, so validating only at compose
+    # generation would still let a mismatched patched image reach the guest.
+    from winpodx.core.pod.disguise import DisguiseImageError, validate_disguise_image
+
+    try:
+        validate_disguise_image(cfg)
+    except DisguiseImageError as e:
+        log.error("Refusing to start the pod: %s", e)
+        return PodStatus(state=PodState.ERROR, error=str(e))
+
     backend = get_backend(cfg)
 
     # #754: probe for host port conflicts (e.g. GNOME Remote Desktop already

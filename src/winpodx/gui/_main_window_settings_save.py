@@ -122,8 +122,25 @@ class SettingsSaveMixin:
                     "Container must be recreated to apply (Windows disk "
                     "preserved).\n\nRestart now?"
                 )
-            build_disguise = new_disguise_level == "max" and not disguise_image_present(self.cfg)
-            if build_disguise:
+            from winpodx.cli.disguise import disguise_image_is_stale
+
+            # Rebuild rather than silently adopt: an image built on an older dockur
+            # makes dockur reinstall the guest from scratch. `is True` is load-bearing
+            # -- `None` means "unreadable", and must not force a 20-40 min rebuild.
+            stale_disguise = (
+                new_disguise_level == "max" and disguise_image_is_stale(self.cfg) is True
+            )
+            build_disguise = new_disguise_level == "max" and (
+                stale_disguise or not disguise_image_present(self.cfg)
+            )
+            if stale_disguise:
+                prompt += tr(
+                    "\n\nThe local patched-QEMU image was built against an older dockur "
+                    "release than WinPodX now pins, so using it as-is would make dockur "
+                    "reinstall Windows from scratch. It will be rebuilt first (~20-40 "
+                    "min). Progress shows in the setup window."
+                )
+            elif build_disguise:
                 prompt += tr(
                     "\n\nHardened mode will also build a patched-QEMU image locally "
                     "first (one-time, ~20-40 min). Progress shows in the setup window."

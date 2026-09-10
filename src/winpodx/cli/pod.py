@@ -788,8 +788,17 @@ def _recreate(*, wipe_storage: bool, keep_iso: bool = False, assume_yes: bool = 
     from winpodx.core.compose import generate_compose
     from winpodx.core.config import Config
     from winpodx.core.pod import PodState, start_pod, stop_pod
+    from winpodx.core.pod.disguise import DisguiseImageError, validate_disguise_image
 
     cfg = Config.load()
+
+    # Validate BEFORE anything destructive: the stop/wipe below used to run
+    # first, so a later failure left the guest already deleted.
+    try:
+        validate_disguise_image(cfg)
+    except DisguiseImageError as e:
+        print(tr("Cannot recreate: {error}").format(error=e), file=sys.stderr)
+        sys.exit(1)
 
     if wipe_storage:
         # Refuse to run with a non-empty storage_path that points outside

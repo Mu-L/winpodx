@@ -1437,6 +1437,7 @@ def test_save_settings_reverts_a_declined_device_changing_disguise_switch(
 
     monkeypatch.setattr(QMessageBox, "question", staticmethod(_question))
     monkeypatch.setattr("winpodx.cli.disguise.disguise_image_present", lambda cfg: True)
+    monkeypatch.setattr("winpodx.cli.disguise.disguise_image_is_stale", lambda cfg: False)
 
     host.input_disguise_level.setCurrentIndex(host.input_disguise_level.findData("max"))
     host._save_settings()
@@ -1496,6 +1497,56 @@ def test_save_settings_repoints_disguise_image_when_it_is_already_built(
 
     assert cfg.pod.disguise_image == _DISGUISE_TAG
     assert host.bringup_calls == []
+
+
+def test_save_settings_rebuilds_a_stale_patched_image_instead_of_adopting_it(
+    hermetic_settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ensure_qapp()
+    cfg = _make_cfg()
+    cfg.pod.disguise_level = "off"
+    host = _build_page(cfg)
+    old = _make_cfg()
+    old.pod.disguise_level = "off"
+    _no_recreate(monkeypatch, old)
+
+    prompts: list[str] = []
+
+    def _question(parent, title, text, buttons=None, default=None):
+        prompts.append(text)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(_question))
+    monkeypatch.setattr("winpodx.cli.disguise.disguise_image_present", lambda cfg: True)
+    monkeypatch.setattr("winpodx.cli.disguise.disguise_image_is_stale", lambda cfg: True)
+
+    host.input_disguise_level.setCurrentIndex(host.input_disguise_level.findData("max"))
+    host._save_settings()
+
+    assert "older dockur" in prompts[0]
+    assert host.bringup_calls == [{"recreate": True, "wipe_storage": True, "build_disguise": True}]
+
+
+def test_save_settings_does_not_rebuild_when_image_staleness_is_unknown(
+    hermetic_settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ensure_qapp()
+    cfg = _make_cfg()
+    cfg.pod.disguise_level = "off"
+    host = _build_page(cfg)
+    old = _make_cfg()
+    old.pod.disguise_level = "off"
+    _no_recreate(monkeypatch, old)
+    monkeypatch.setattr(
+        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
+    )
+    monkeypatch.setattr("winpodx.cli.disguise.disguise_image_present", lambda cfg: True)
+    monkeypatch.setattr("winpodx.cli.disguise.disguise_image_is_stale", lambda cfg: None)
+
+    host.input_disguise_level.setCurrentIndex(host.input_disguise_level.findData("max"))
+    host._save_settings()
+
+    assert host.bringup_calls == [{"recreate": True, "wipe_storage": True, "build_disguise": False}]
 
 
 def test_save_settings_skips_the_recreate_prompt_on_the_manual_backend(
