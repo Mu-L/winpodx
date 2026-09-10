@@ -83,26 +83,20 @@ def _qemu_version(backend: str, image: str) -> str:
     return m.group(1) if m else ""
 
 
-def expected_dockur_version() -> str | None:
-    """The dockur version the current pin corresponds to, from VERSIONS.txt.
+def pinned_dockur_version(cfg) -> str | None:  # type: ignore[no-untyped-def]
+    """dockur version of the image a patched build would be based on.
 
-    ``config/oem/VERSIONS.txt`` is what the weekly upstream watcher updates, so
-    it is the one place that already tracks the pinned dockur release.
+    Read off the pin itself, NOT ``config/oem/VERSIONS.txt``: that file tracks
+    what upstream currently ships and is decoupled from the pin on purpose, so
+    comparing against it would call a correctly-pinned image stale as soon as
+    the weekly watcher bumps a baseline. Reading the pin means staleness
+    follows whatever dockur image winpodx actually uses, with no second place
+    to keep in sync.
     """
-    from winpodx.utils.paths import bundle_dir
+    from winpodx.core.config import DOCKUR_IMAGE_PIN
 
-    base = bundle_dir()
-    if base is None:
-        return None
-    try:
-        text = (Path(base) / "config" / "oem" / "VERSIONS.txt").read_text(encoding="utf-8")
-    except OSError:
-        return None
-    for line in text.splitlines():
-        key, _, value = line.partition("=")
-        if key.strip() == "dockur":
-            return value.strip().lstrip("v") or None
-    return None
+    backend = cfg.pod.backend if cfg.pod.backend in ("podman", "docker") else "podman"
+    return _image_label_version(backend, cfg.pod.image or DOCKUR_IMAGE_PIN)
 
 
 def _image_label_version(backend: str, image: str) -> str | None:
@@ -144,7 +138,7 @@ def disguise_image_is_stale(cfg) -> bool | None:  # type: ignore[no-untyped-def]
         tag = _DISGUISE_TAG
     backend = cfg.pod.backend if cfg.pod.backend in ("podman", "docker") else "podman"
     built_on = _image_label_version(backend, tag)
-    expected = expected_dockur_version()
+    expected = pinned_dockur_version(cfg)
     if not built_on or not expected:
         return None
     return built_on != expected

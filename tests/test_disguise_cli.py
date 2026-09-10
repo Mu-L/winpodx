@@ -409,20 +409,20 @@ class TestDisguiseImageStaleness:
 
     def test_image_older_than_the_pin_is_stale(self, monkeypatch):
         monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: "5.16")
-        monkeypatch.setattr(disguise, "expected_dockur_version", lambda: "6.05")
+        monkeypatch.setattr(disguise, "pinned_dockur_version", lambda _c: "6.05")
 
         assert disguise.disguise_image_is_stale(self._cfg()) is True
 
     def test_image_matching_the_pin_is_current(self, monkeypatch):
         monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: "6.05")
-        monkeypatch.setattr(disguise, "expected_dockur_version", lambda: "6.05")
+        monkeypatch.setattr(disguise, "pinned_dockur_version", lambda _c: "6.05")
 
         assert disguise.disguise_image_is_stale(self._cfg()) is False
 
     def test_unknown_version_is_not_reported_as_stale(self, monkeypatch):
         # Never cry wolf: an unreadable label must not trigger a scary warning.
         monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: None)
-        monkeypatch.setattr(disguise, "expected_dockur_version", lambda: "6.05")
+        monkeypatch.setattr(disguise, "pinned_dockur_version", lambda _c: "6.05")
 
         assert disguise.disguise_image_is_stale(self._cfg()) is None
 
@@ -433,9 +433,25 @@ class TestDisguiseImageStaleness:
 
         assert disguise.disguise_image_is_stale(cfg) is None
 
-    def test_expected_version_comes_from_the_versions_file(self):
-        # VERSIONS.txt is the tracker the upstream-watcher workflow updates.
-        assert disguise.expected_dockur_version() == "6.05"
+    def test_pinned_version_is_read_off_the_pin_itself(self, monkeypatch):
+        seen: list[str] = []
+
+        def _label(_backend, image):
+            seen.append(image)
+            return "6.05"
+
+        monkeypatch.setattr(disguise, "_image_label_version", _label)
+        cfg = self._cfg()
+        cfg.pod.image = "ghcr.io/dockur/windows@sha256:deadbeef"
+
+        assert disguise.pinned_dockur_version(cfg) == "6.05"
+        assert seen == ["ghcr.io/dockur/windows@sha256:deadbeef"]
+
+    def test_a_versions_file_bump_alone_does_not_make_a_pinned_image_stale(self, monkeypatch):
+        # Staleness reads the pin, so VERSIONS.txt moving alone changes nothing.
+        monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: "6.05")
+
+        assert disguise.disguise_image_is_stale(self._cfg()) is False
 
 
 class TestStaleImageWarningOnMaxSwitch:
@@ -446,7 +462,7 @@ class TestStaleImageWarningOnMaxSwitch:
         monkeypatch.setattr(config_cmd, "tr", lambda s: s, raising=False)
         monkeypatch.setattr(disguise, "disguise_image_is_stale", lambda _c: stale)
         monkeypatch.setattr(disguise, "_image_label_version", lambda _b, _i: "5.16")
-        monkeypatch.setattr(disguise, "expected_dockur_version", lambda: "6.05")
+        monkeypatch.setattr(disguise, "pinned_dockur_version", lambda _c: "6.05")
 
         class _Pod:
             backend = "podman"

@@ -42,7 +42,7 @@ def _warn_if_disguise_image_stale(cfg) -> None:  # type: ignore[no-untyped-def]
         from winpodx.cli.disguise import (
             _image_label_version,
             disguise_image_is_stale,
-            expected_dockur_version,
+            pinned_dockur_version,
         )
 
         if disguise_image_is_stale(cfg) is not True:
@@ -50,7 +50,7 @@ def _warn_if_disguise_image_stale(cfg) -> None:  # type: ignore[no-untyped-def]
         backend = cfg.pod.backend if cfg.pod.backend in ("podman", "docker") else "podman"
         tag = (cfg.pod.disguise_image or "").strip() or "localhost/winpodx-windows-disguise:latest"
         built_on = _image_label_version(backend, tag) or "?"
-        expected = expected_dockur_version() or "?"
+        expected = pinned_dockur_version(cfg) or "?"
     except Exception:  # noqa: BLE001 -- a warning must never break `config set`
         return
     print(
