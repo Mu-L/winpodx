@@ -156,6 +156,13 @@ class MaintenanceMixin(MaintenanceCardsMixin):
                 self._on_sync_guest,
                 True,
             ),
+            (
+                "update-arrows",
+                tr("Reinstall Windows"),
+                tr("Wipe the Windows disk and run setup again with your choices"),
+                self._on_reinstall_windows,
+                False,
+            ),
         ]
         layout.addWidget(self._make_tool_card(tr("Pod Management"), pod_tools, base_idx=0))
 
@@ -273,6 +280,34 @@ class MaintenanceMixin(MaintenanceCardsMixin):
                 C.YELLOW,
             )
         self._refresh_sessions_panel(force=True)
+
+    def _on_reinstall_windows(self) -> None:
+        """Open the setup wizard pre-filled from the current config (wipe+reinstall)."""
+        from PySide6.QtWidgets import QDialog
+
+        from winpodx.gui._setup_wizard import SetupWizardDialog
+
+        if not _confirm_with_callout(
+            self,
+            tr("Reinstall Windows"),
+            tr(
+                "This destroys the Windows disk and everything installed in it, "
+                "then reinstalls Windows with the settings you choose. "
+                "Your WinPodX settings and app profiles are kept."
+            ),
+            tr("This cannot be undone."),
+            level="danger",
+        ):
+            return
+        dlg = SetupWizardDialog(self, mode="reinstall", cfg=self.cfg)
+        result = dlg.exec()
+        if result != QDialog.DialogCode.Accepted:
+            return
+        self.cfg = Config.load()
+        if dlg.open_apps:
+            self._switch_page(1)
+        elif dlg.open_terminal:
+            self._switch_page(4)
 
     def _restyle_tools(self) -> None:
         root = getattr(self, "_tools_page", None) or getattr(self, "page", None)

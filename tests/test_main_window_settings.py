@@ -509,69 +509,72 @@ def click_dialog_button(monkeypatch: pytest.MonkeyPatch):
     return _pick
 
 
-def test_first_run_setup_prompt_skip_button_does_nothing(
-    click_dialog_button, monkeypatch: pytest.MonkeyPatch
+class _FakeFinished:
+    def __init__(self) -> None:
+        self._slots: list = []
+
+    def connect(self, slot) -> None:
+        self._slots.append(slot)
+
+    def emit(self, result: int) -> None:
+        for slot in list(self._slots):
+            slot(result)
+
+
+class _FakeSetupWizard:
+    """Stand-in so nav tests never construct the real Qt wizard."""
+
+    last: dict = {}
+    result_code = 0
+
+    def __init__(self, parent, *, mode="first-run", cfg=None) -> None:
+        self.open_apps = False
+        self.open_terminal = False
+        self.finished = _FakeFinished()
+        _FakeSetupWizard.last = {"mode": mode, "cfg": cfg, "parent": parent}
+
+    def open(self) -> None:
+        self.finished.emit(type(self).result_code)
+
+
+def test_first_run_setup_prompt_skip_leaves_the_host_uninitialized(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _ensure_qapp()
+    from PySide6.QtWidgets import QDialog
+
+    _FakeSetupWizard.result_code = QDialog.DialogCode.Rejected
+    monkeypatch.setattr("winpodx.gui._setup_wizard.SetupWizardDialog", _FakeSetupWizard)
     host = NavHarness(_make_cfg())
-    ran: list[str] = []
-    monkeypatch.setattr(NavHarness, "_run_first_run_setup", lambda self, mode: ran.append(mode))
-
-    click_dialog_button(2)  # Auto / Customize / Skip
     host._show_first_run_setup_prompt()
-    assert ran == []
+    assert host.pages.currentIndex() == 0
+    assert _FakeSetupWizard.last["mode"] == "first-run"
 
 
-@pytest.mark.parametrize(("index", "mode"), [(0, "auto"), (1, "customize")])
-def test_first_run_setup_prompt_routes_auto_and_customize(
-    click_dialog_button, monkeypatch: pytest.MonkeyPatch, index: int, mode: str
+def test_first_run_setup_prompt_open_apps_switches_to_applications(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _ensure_qapp()
-    host = NavHarness(_make_cfg())
-    ran: list[str] = []
-    monkeypatch.setattr(NavHarness, "_run_first_run_setup", lambda self, m: ran.append(m))
+    from PySide6.QtWidgets import QDialog
 
-    click_dialog_button(index)
-    host._show_first_run_setup_prompt()
-    assert ran == [mode]
-
-
-def test_run_first_run_setup_invokes_handle_setup_and_reloads_config(
-    monkeypatch: pytest.MonkeyPatch, fake_single_shot, inline_worker_threads
-) -> None:
-    _ensure_qapp()
-    seen: list = []
-    monkeypatch.setattr("winpodx.cli.setup_cmd.handle_setup", lambda args: seen.append(args))
     reloaded = _make_cfg()
     reloaded.rdp.user = "reloaded-user"
     monkeypatch.setattr(Config, "load", classmethod(lambda cls: reloaded))
+    monkeypatch.setattr("winpodx.gui._main_window_nav.list_available_apps", lambda: ["word"])
 
+    class _AcceptApps(_FakeSetupWizard):
+        result_code = QDialog.DialogCode.Accepted
+
+        def __init__(self, parent, *, mode="first-run", cfg=None) -> None:
+            super().__init__(parent, mode=mode, cfg=cfg)
+            self.open_apps = True
+
+    monkeypatch.setattr("winpodx.gui._setup_wizard.SetupWizardDialog", _AcceptApps)
     host = NavHarness(_make_cfg())
-    host._run_first_run_setup("customize")
-
-    assert len(seen) == 1
-    assert seen[0].customize is True
-    assert seen[0].non_interactive is False
+    host._show_first_run_setup_prompt()
     assert host.cfg is reloaded
-    assert any("Setup complete" in args[0] for args in host.log_signal.emissions)
-    # The ready toast is marshalled onto the GUI thread, never called inline.
-    assert [ms for ms, _fn in fake_single_shot] == [0]
-
-
-def test_run_first_run_setup_logs_a_failure_without_raising(
-    monkeypatch: pytest.MonkeyPatch, fake_single_shot, inline_worker_threads
-) -> None:
-    _ensure_qapp()
-
-    def _boom(args):
-        raise RuntimeError("no podman")
-
-    monkeypatch.setattr("winpodx.cli.setup_cmd.handle_setup", _boom)
-    host = NavHarness(_make_cfg())
-    host._run_first_run_setup("auto")
-
-    assert any("Setup failed: no podman" in args[0] for args in host.log_signal.emissions)
-    assert fake_single_shot == []
+    assert host.apps == ["word"]
+    assert host.pages.currentIndex() == 1
 
 
 def _stub_first_run_checks(monkeypatch: pytest.MonkeyPatch) -> None:

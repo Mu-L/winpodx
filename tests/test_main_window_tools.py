@@ -293,10 +293,10 @@ def _settings_cards(widget) -> list:
 
 def test_build_maintenance_page_renders_every_tool_row(maint):
     page = maint.build_page()
-    # Win11 SettingsCard rows replace the old actionRow chrome: 3 Pod-Management
-    # + 6 System actions. Session rows use sessionCard so they are not counted.
+    # Win11 SettingsCard rows: Pod Management + System. Session rows use
+    # sessionCard so they are not counted.
     cards = _settings_cards(page)
-    assert len(cards) == 9
+    assert len(cards) == 10
     for card in cards:
         assert getattr(card, "title_label", None) is not None
         assert getattr(card, "action_widget", None) is not None
@@ -307,6 +307,7 @@ def test_build_maintenance_page_renders_every_tool_row(maint):
     for expected in ("Sync Time", "Debloat", "Grow Disk", "Sync Guest"):
         assert expected in labels
     assert "Apply Windows Fixes" in labels
+    assert "Reinstall Windows" in labels
     # The live-session poller is wired but not started until the tab shows.
     assert maint._sessions_timer.interval() == 2500
     assert not maint._sessions_timer.isActive()
@@ -396,6 +397,7 @@ def test_pod_and_guest_groups_split_existing_actions(maint):
         "Full Desktop",
         "Grow Disk",
         "Sync Guest",
+        "Reinstall Windows",
     }
     assert guest == {"Clean Locks", "Sync Time", "Debloat", "Apply Windows Fixes"}
 
@@ -435,7 +437,7 @@ def test_sessions_panel_lists_live_sessions(monkeypatch):
     harness = _MaintHarness(_cfg())
     page = harness.build_page()
     # Tool actions stay settingsCard; live sessions are compact sessionCard rows.
-    assert len(_settings_cards(page)) == 9
+    assert len(_settings_cards(page)) == 10
     session_rows = page.findChildren(QFrame, "sessionCard")
     assert len(session_rows) == 2
     texts = {lbl.text() for lbl in page.findChildren(QLabel)}
