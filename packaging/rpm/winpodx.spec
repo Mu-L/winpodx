@@ -92,6 +92,16 @@ MIME handlers, icons, and a Qt tray.
 
 %install
 %pyproject_install
+# Desktop integration. Without these the package installs a binary and nothing
+# else: no menu entry to click (the %%post banner below tells users to look for
+# one) and no software-center listing. The wheel's shared-data copy under
+# %{_datadir}/winpodx/data/ is not a location any desktop environment scans.
+install -Dm644 data/winpodx.desktop \
+    %{buildroot}%{_datadir}/applications/winpodx.desktop
+install -Dm644 data/winpodx-icon.svg \
+    %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/winpodx.svg
+install -Dm644 data/org.winpodx.WinPodX.metainfo.xml \
+    %{buildroot}%{_datadir}/metainfo/org.winpodx.WinPodX.metainfo.xml
 install -Dm755 packaging/scripts/postrm-common.sh \
     %{buildroot}%{_datadir}/winpodx/packaging/postrm-common.sh
 install -Dm755 uninstall.sh \
@@ -172,6 +182,9 @@ exit 0
 %{python3_sitelib}/winpodx-*.dist-info/
 %endif
 %{_datadir}/winpodx/
+%{_datadir}/applications/winpodx.desktop
+%{_datadir}/icons/hicolor/scalable/apps/winpodx.svg
+%{_datadir}/metainfo/org.winpodx.WinPodX.metainfo.xml
 
 %changelog
 * Mon Sep 07 2026 Kim DaeHyun <kernalix7@kodenet.io> - 0.11.0-0

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: MIT -->
+<component type="desktop-application">
+  <id>org.winpodx.WinPodX</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>WinPodX</name>
+  <summary>Run Windows apps as native Linux windows</summary>
+
+  <developer id="org.winpodx">
+    <name>Kim DaeHyun</name>
+  </developer>
+
+  <description>
+    <p>
+      WinPodX runs Windows applications from a Podman or Docker container and
+      shows each one as its own Linux window, keeping its icon, taskbar entry
+      and file associations. You only see a full Windows desktop when you ask
+      for one.
+    </p>
+    <p>
+      Windows runs in the background and starts on demand: the container pauses
+      when idle and wakes on the next launch.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Each Windows app opens as a native window over FreeRDP RemoteApp</li>
+      <li>Imports Start Menu apps with their icons and registers desktop entries</li>
+      <li>Two-way clipboard, audio, printers, home directory, USB and PCI passthrough</li>
+      <li>Linux apps appear in the Windows "Open with" menu</li>
+      <li>Podman by default, with Docker and manual RDP also supported</li>
+      <li>Guided first-run setup with host checks, so no terminal is required</li>
+    </ul>
+    <p>
+      A running Windows container needs hardware virtualization (Intel VT-x or
+      AMD-V) and enough disk space for a Windows installation.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">winpodx.desktop</launchable>
+  <provides>
+    <binary>winpodx</binary>
+  </provides>
+
+  <categories>
+    <category>System</category>
+    <category>Utility</category>
+  </categories>
+
+  <keywords>
+    <keyword>windows</keyword>
+    <keyword>rdp</keyword>
+    <keyword>remoteapp</keyword>
+    <keyword>virtualization</keyword>
+    <keyword>podman</keyword>
+  </keywords>
+
+  <url type="homepage">https://www.winpodx.org</url>
+  <url type="bugtracker">https://github.com/kernalix7/winpodx/issues</url>
+  <url type="vcs-browser">https://github.com/kernalix7/winpodx</url>
+  <url type="donation">https://ko-fi.com/kernalix7</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Windows apps running as native Linux windows</caption>
+      <image>https://raw.githubusercontent.com/kernalix7/winpodx/main/docs/images/demo.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dashboard showing container state, resource use and pinned apps</caption>
+      <image>https://raw.githubusercontent.com/kernalix7/winpodx/main/docs/images/gui-dashboard.png</image>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.11.0" date="2026-09-09">
+      <url type="details">https://github.com/kernalix7/winpodx/releases/tag/v0.11.0</url>
+    </release>
+  </releases>
+</component>

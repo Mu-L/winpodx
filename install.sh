@@ -380,6 +380,7 @@ WINPODX_INSTALL_MARKER="$CONFIG_HOME/winpodx/.install_in_progress"
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
 ICON_DIR="$ICON_BASE/scalable/apps"
+METAINFO_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/metainfo"
 
 # Disarmed on success.
 ROLLBACK_ARMED=1
@@ -470,6 +471,7 @@ rollback() {
     fi
     rm -f "$DESKTOP_DIR/winpodx.desktop" 2>/dev/null || true
     rm -f "$ICON_DIR/winpodx.svg" 2>/dev/null || true
+    rm -f "$METAINFO_DIR/org.winpodx.WinPodX.metainfo.xml" 2>/dev/null || true
     # Do NOT remove ~/.config/winpodx itself — only our own marker, which
     # cleanup_install_marker already handled above.
 }
@@ -1765,6 +1767,12 @@ fi
 mkdir -p "$DESKTOP_DIR" "$ICON_DIR"
 cp "$INSTALL_DIR/data/winpodx.desktop" "$DESKTOP_DIR/winpodx.desktop"
 cp "$INSTALL_DIR/data/winpodx-icon.svg" "$ICON_DIR/winpodx.svg"
+# AppStream metainfo: makes winpodx a real entry in GNOME Software /
+# KDE Discover rather than an unlabelled binary. Packages install the
+# system-wide copy; this is the curl path's per-user equivalent.
+mkdir -p "$METAINFO_DIR"
+cp "$INSTALL_DIR/data/org.winpodx.WinPodX.metainfo.xml" \
+   "$METAINFO_DIR/org.winpodx.WinPodX.metainfo.xml"
 
 # Ensure index.theme exists (required for KDE icon cache)
 if [ ! -f "$ICON_BASE/index.theme" ]; then

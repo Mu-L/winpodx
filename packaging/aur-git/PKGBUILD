@@ -68,8 +68,11 @@ package() {
   install -Dm644 CHANGELOG.md "$pkgdir/usr/share/doc/winpodx/CHANGELOG.md"
   install -Dm644 data/winpodx.desktop \
     "$pkgdir/usr/share/applications/winpodx.desktop"
+  # hicolor: scalable/, not a pixel-size dir -- the source is an SVG.
   install -Dm644 data/winpodx-icon.svg \
-    "$pkgdir/usr/share/icons/hicolor/256x256/apps/winpodx.svg"
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/winpodx.svg"
+  install -Dm644 data/org.winpodx.WinPodX.metainfo.xml \
+    "$pkgdir/usr/share/metainfo/org.winpodx.WinPodX.metainfo.xml"
   install -Dm644 data/winpodx.toml.example \
     "$pkgdir/usr/share/winpodx/winpodx.toml.example"
   install -Dm755 packaging/scripts/postrm-common.sh \

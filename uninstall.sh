@@ -390,6 +390,13 @@ if [[ -f "$DESKTOP_DIR/winpodx.desktop" ]]; then
     log "Removed WinPodX GUI launcher"
     REMOVED=$((REMOVED + 1))
 fi
+# AppStream metainfo installed by the curl path (packages own their own copy).
+METAINFO_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/metainfo/org.winpodx.WinPodX.metainfo.xml"
+if [[ -f "$METAINFO_FILE" ]]; then
+    rm -f "$METAINFO_FILE"
+    log "Removed AppStream metainfo"
+    REMOVED=$((REMOVED + 1))
+fi
 # Remove app desktop entries. Guard the dir: under `set -euo pipefail` a find
 # over a missing DESKTOP_DIR exits non-zero and, via pipefail, aborts the whole
 # uninstall mid-cleanup (leaving a half-removed state) — seen in the #716 smoke.

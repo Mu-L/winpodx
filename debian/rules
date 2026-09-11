@@ -9,3 +9,10 @@ export PYBUILD_SYSTEM=pyproject
 # Tests run upstream in GitHub Actions CI across Python 3.10-3.14; skip them
 # here so .deb builds don't need pytest in Build-Depends on every target.
 override_dh_auto_test:
+
+# The icon ships as data/winpodx-icon.svg but winpodx.desktop declares
+# Icon=winpodx, so it has to land as winpodx.svg. dh_install cannot rename,
+# hence the explicit install here rather than a line in winpodx.install.
+execute_after_dh_auto_install:
+	install -Dm644 data/winpodx-icon.svg \
+		debian/winpodx/usr/share/icons/hicolor/scalable/apps/winpodx.svg
