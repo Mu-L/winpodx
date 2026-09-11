@@ -809,6 +809,47 @@ def _run_full_provision(cfg: Config) -> None:
         )
 
 
+_PRESET_POD_FIELDS = (
+    "cpu_cores",
+    "ram_gb",
+    "win_version",
+    "language",
+    "region",
+    "keyboard",
+    "timezone",
+    "tuning_profile",
+    "disk_size",
+)
+
+
+def apply_setup_presets(cfg: Config, args: argparse.Namespace) -> list[str]:
+    """Apply explicitly-supplied setup answers over the host-detected defaults.
+
+    The interactive wizard collects these with ``input()``, which needs a tty.
+    A caller that already has the answers -- the Qt setup wizard, or a scripted
+    ``winpodx setup`` -- supplies them here instead, so both routes converge on
+    the same downstream install rather than growing a second implementation.
+
+    Only attributes present AND non-None on ``args`` are applied; everything
+    else keeps the tier recommendation. Returns the field names applied.
+    """
+    applied: list[str] = []
+    for field in _PRESET_POD_FIELDS:
+        value = getattr(args, field, None)
+        if value is None or value == "":
+            continue
+        setattr(cfg.pod, field, value)
+        applied.append(field)
+    user = getattr(args, "rdp_user", None)
+    if user:
+        cfg.rdp.user = user
+        applied.append("rdp_user")
+    if applied:
+        cfg.pod.__post_init__()
+        cfg.rdp.__post_init__()
+    return applied
+
+
 def handle_setup(args: argparse.Namespace) -> None:
     """Run the setup wizard."""
     import sys
@@ -1019,6 +1060,7 @@ def handle_setup(args: argparse.Namespace) -> None:
         if non_interactive:
             cfg.pod.cpu_cores = tier.cpu_cores
             cfg.pod.ram_gb = tier.ram_gb
+            apply_setup_presets(cfg, args)
         else:
             print(
                 tr(
