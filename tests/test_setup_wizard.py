@@ -61,7 +61,6 @@ def test_host_state_is_complete_requires_all_fields() -> None:
     )
     assert HostState(**base).is_complete
     for field in (
-        "in_kvm_group",
         "dev_kvm_present",
         "dev_kvm_readable",
         "subuid_configured",
@@ -70,6 +69,58 @@ def test_host_state_is_complete_requires_all_fields() -> None:
         bad = dict(base)
         bad[field] = False
         assert not HostState(**bad).is_complete, f"{field}=False should fail completeness"
+
+
+class TestKvmGroupIsAMechanismNotARequirement:
+    """A world-accessible /dev/kvm needs no group membership.
+
+    Distros shipping a 0666 udev rule leave everyone outside the `kvm` group
+    while KVM works fine. Treating membership as its own requirement failed a
+    check no `usermod` could clear -- the setup wizard refused to advance on a
+    host that had been running Windows all along.
+    """
+
+    def _state(self, **over) -> HostState:
+        base = dict(
+            in_kvm_group=False,
+            kvm_group_exists=True,
+            dev_kvm_present=True,
+            dev_kvm_readable=True,
+            subuid_configured=True,
+            subgid_configured=True,
+            kvm_module_persistent=True,
+        )
+        base.update(over)
+        return HostState(**base)
+
+    def test_accessible_dev_kvm_without_group_membership_is_complete(self):
+        state = self._state()
+
+        assert state.kvm_access_ok
+        assert state.blocking_failures == []
+        assert state.is_complete
+
+    def test_it_is_not_offered_as_a_fix_when_access_already_works(self):
+        assert "kvm-group-membership" not in self._state().missing_fixable
+
+    def test_it_does_block_when_the_device_is_not_accessible(self):
+        state = self._state(dev_kvm_readable=False)
+
+        assert state.blocking_failures == ["dev_kvm_readable", "in_kvm_group"]
+        assert "kvm-group-membership" in state.missing_fixable
+
+    def test_a_pending_relogin_blocks_on_access_not_on_membership(self):
+        # usermod succeeded but the session predates it: membership reads True
+        # while the device is still unreachable until the user logs back in.
+        state = self._state(in_kvm_group=True, dev_kvm_readable=False)
+
+        assert state.blocking_failures == ["dev_kvm_readable"]
+        assert "kvm-group-membership" not in state.missing_fixable
+
+    def test_a_missing_device_reports_only_that(self):
+        state = self._state(dev_kvm_present=False, dev_kvm_readable=False)
+
+        assert state.blocking_failures == ["dev_kvm_present"]
 
 
 def test_apply_script_only_includes_selected_items() -> None:

@@ -56,10 +56,15 @@ class PrerequisitesPage(QWidget):
         self._paint(self._state)
 
     def can_proceed(self) -> bool:
-        """True when every required HostState field passes."""
-        return all(
-            bool(getattr(self._state, spec.field)) for spec in prereq_specs() if spec.required
-        )
+        """True when nothing on the host actually blocks a Windows install.
+
+        Delegates to ``HostState.blocking_failures`` rather than re-deciding
+        per row: a passing check can make another one moot. On a host whose
+        ``/dev/kvm`` is world-accessible the user is not in the ``kvm`` group
+        and never needs to be, and gating on the row alone stranded them on a
+        failure no action could clear.
+        """
+        return not self._state.blocking_failures
 
     def _restyle(self) -> None:
         apply_w11_button(self._fix_btn, theme.BTN_PRIMARY, role="primary")
@@ -86,11 +91,16 @@ class PrerequisitesPage(QWidget):
             if widget is not None:
                 widget.deleteLater()
         unfixable: list[str] = []
+        blocking = set(state.blocking_failures)
         for spec in prereq_specs():
             ok = bool(getattr(state, spec.field))
             card = self._cards[spec.field]
-            color = theme.C.GREEN if ok else theme.C.YELLOW if not spec.required else theme.C.RED
-            label = tr("Pass") if ok else tr("Optional") if not spec.required else tr("Fail")
+            # A row can fail without blocking: kvm group membership is moot
+            # once /dev/kvm is already accessible. Red is reserved for the
+            # failures that actually stop the install.
+            blocks = spec.field in blocking
+            color = theme.C.GREEN if ok else theme.C.RED if blocks else theme.C.YELLOW
+            label = tr("Pass") if ok else tr("Fail") if blocks else tr("Optional")
             badge = make_status_badge(label, color)
             old = getattr(card, "action_widget", None)
             if old is not None:

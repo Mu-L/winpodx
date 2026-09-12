@@ -37,26 +37,52 @@ class HostState:
     kvm_amd, so the module loads at boot without a manual modprobe."""
 
     @property
-    def is_complete(self) -> bool:
-        """All host setup that the wizard owns is in place. ``/dev/kvm``
-        presence is host-kernel level and not something the wizard can
-        fix (user has to enable virt in BIOS / modprobe); we still
-        require it for completion since rootless KVM is meaningless
-        without it.
+    def kvm_access_ok(self) -> bool:
+        """Whether this user can actually open ``/dev/kvm`` right now.
+
+        ``kvm`` group membership is ONE mechanism for granting this, not the
+        requirement itself. Distros that ship ``/dev/kvm`` world-accessible via
+        a 0666 udev rule grant it with no group at all, so treating membership
+        as its own requirement fails a check the user cannot act on -- and a
+        ``usermod`` plus re-login there would change nothing.
         """
-        return (
-            self.in_kvm_group
-            and self.dev_kvm_present
-            and self.dev_kvm_readable
-            and self.subuid_configured
-            and self.subgid_configured
-        )
+        return self.dev_kvm_present and self.dev_kvm_readable
+
+    @property
+    def blocking_failures(self) -> list[str]:
+        """Field names that genuinely prevent a Windows install.
+
+        Single source of truth for "is the host ready", so the CLI wizard, the
+        Qt wizard and ``doctor`` cannot drift into disagreeing about it.
+        """
+        blocking: list[str] = []
+        if not self.dev_kvm_present:
+            blocking.append("dev_kvm_present")
+        elif not self.kvm_access_ok:
+            blocking.append("dev_kvm_readable")
+            if not self.in_kvm_group and self.kvm_group_exists:
+                blocking.append("in_kvm_group")
+        if not self.subuid_configured:
+            blocking.append("subuid_configured")
+        if not self.subgid_configured:
+            blocking.append("subgid_configured")
+        return blocking
+
+    @property
+    def is_complete(self) -> bool:
+        """All host setup the wizard owns is in place.
+
+        ``/dev/kvm`` presence is host-kernel level and the wizard cannot fix it
+        (enable virt in firmware / modprobe), but rootless KVM is meaningless
+        without it, so it still counts.
+        """
+        return not self.blocking_failures
 
     @property
     def missing_fixable(self) -> list[str]:
         """Human-readable list of items the wizard CAN apply via pkexec."""
         missing: list[str] = []
-        if not self.in_kvm_group and self.kvm_group_exists:
+        if not self.kvm_access_ok and not self.in_kvm_group and self.kvm_group_exists:
             missing.append("kvm-group-membership")
         if not self.subuid_configured:
             missing.append("subuid-entry")
